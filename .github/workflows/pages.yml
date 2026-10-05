@@ -1,5 +1,5 @@
-# Compila la versión web y la publica en GitHub Pages en cada push a main.
-# URL: https://carlosss05.github.io/gasolineras/
+﻿# Compila la versiÃ³n web y la publica en GitHub Pages en cada push a main.
+# URL: https://carlosss05.github.io/Gasolineras/
 name: Publicar web
 
 on:
@@ -27,7 +27,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test
-      - run: flutter build web --release --base-href /gasolineras/
+      - run: flutter build web --release --base-href /Gasolineras/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
