@@ -46,3 +46,6 @@ app.*.map.json
 
 # Restos de compilaciones de Gradle
 /android/build/
+
+# Clave de firma de Android y sus datos (NO subir nunca)
+/.secrets/
