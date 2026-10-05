@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../models/fuel_type.dart';
@@ -7,10 +8,18 @@ import '../state/stations_controller.dart';
 import 'favorites_screen.dart';
 import 'format.dart';
 import 'scope_picker.dart';
+import 'stations_map.dart';
 import 'widgets/station_tile.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _showMap = false;
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +29,11 @@ class HomeScreen extends StatelessWidget {
         title: const Text('Gasolineras baratas'),
         actions: [
           IconButton(
+            tooltip: _showMap ? 'Ver lista' : 'Ver mapa',
+            icon: Icon(_showMap ? Icons.view_list : Icons.map_outlined),
+            onPressed: () => setState(() => _showMap = !_showMap),
+          ),
+          IconButton(
             tooltip: 'Favoritas',
             icon: const Icon(Icons.star_outline),
             onPressed: () =>
@@ -27,13 +41,16 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
         bottom: loading
-            ? const PreferredSize(preferredSize: Size.fromHeight(2), child: LinearProgressIndicator(minHeight: 2))
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
             : null,
       ),
-      body: const Column(
+      body: Column(
         children: [
-          FiltersBar(showSearch: true),
-          Expanded(child: _StationList()),
+          const FiltersBar(showSearch: true),
+          Expanded(child: _showMap ? const _MapView() : const _StationList()),
         ],
       ),
     );
@@ -62,8 +79,10 @@ class FiltersBar extends StatelessWidget {
               child: Row(
                 children: [
                   ActionChip(
-                    avatar: Icon(scope?.kind == ScopeKind.myProvince ? Icons.my_location : Icons.place_outlined,
-                        size: 18),
+                    avatar: Icon(
+                      scope?.kind == ScopeKind.myProvince ? Icons.my_location : Icons.place_outlined,
+                      size: 18,
+                    ),
                     label: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 160),
                       child: Text(scope?.label ?? 'Elegir zona', overflow: TextOverflow.ellipsis),
@@ -109,7 +128,11 @@ class FiltersBar extends StatelessWidget {
             child: SegmentedButton<SortMode>(
               segments: const [
                 ButtonSegment(value: SortMode.price, icon: Icon(Icons.euro), label: Text('Más baratas')),
-                ButtonSegment(value: SortMode.distance, icon: Icon(Icons.near_me), label: Text('Más cercanas')),
+                ButtonSegment(
+                  value: SortMode.distance,
+                  icon: Icon(Icons.near_me),
+                  label: Text('Más cercanas'),
+                ),
               ],
               selected: {c.sort},
               onSelectionChanged: (s) => c.setSort(s.first),
@@ -129,47 +152,76 @@ class FiltersBar extends StatelessWidget {
   }
 }
 
+class _MapView extends StatelessWidget {
+  const _MapView();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<StationsController>();
+    final status = _statusView(context, c);
+    if (status != null) return status;
+
+    final pos = c.position;
+    return StationsMap(
+      // Al cambiar de zona o combustible se vuelve a encuadrar el mapa.
+      key: ValueKey('${c.scope!.cacheKey}-${c.fuel.name}-${c.query}'),
+      entries: c.entries,
+      userLocation: pos == null ? null : LatLng(pos.latitude, pos.longitude),
+      sort: c.sort,
+    );
+  }
+}
+
+/// Mensaje para los estados sin datos (sin zona, descargando, error, sin
+/// resultados) o `null` si hay gasolineras que mostrar.
+Widget? _statusView(BuildContext context, StationsController c) {
+  if (c.scope == null) {
+    if (c.locating) {
+      return const _Message(icon: Icons.my_location, text: 'Buscando tu ubicación…', busy: true);
+    }
+    return _Message(
+      icon: Icons.location_off_outlined,
+      text: 'No hemos podido detectar tu provincia.\nElige una zona para ver precios.',
+      action: FilledButton(onPressed: () => showScopePicker(context), child: const Text('Elegir zona')),
+      secondary: TextButton(onPressed: c.retryLocation, child: const Text('Reintentar ubicación')),
+    );
+  }
+
+  final snapshot = c.snapshot;
+  if (snapshot == null) {
+    if (c.error != null) {
+      return _Message(
+        icon: Icons.cloud_off,
+        text: '${c.error}',
+        action: FilledButton(onPressed: c.refresh, child: const Text('Reintentar')),
+      );
+    }
+    return const _Message(icon: Icons.local_gas_station, text: 'Descargando precios…', busy: true);
+  }
+
+  final entries = c.entries;
+  if (entries.isEmpty) {
+    return _Message(
+      icon: Icons.search_off,
+      text: c.query.isEmpty
+          ? 'Ninguna gasolinera de esta zona vende ${c.fuel.label}.'
+          : 'Sin resultados para "${c.query}".',
+    );
+  }
+  return null;
+}
+
 class _StationList extends StatelessWidget {
   const _StationList();
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<StationsController>();
+    final status = _statusView(context, c);
+    if (status != null) return status;
 
-    if (c.scope == null) {
-      if (c.locating) {
-        return const _Message(icon: Icons.my_location, text: 'Buscando tu ubicación…', busy: true);
-      }
-      return _Message(
-        icon: Icons.location_off_outlined,
-        text: 'No hemos podido detectar tu provincia.\nElige una zona para ver precios.',
-        action: FilledButton(onPressed: () => showScopePicker(context), child: const Text('Elegir zona')),
-        secondary: TextButton(onPressed: c.retryLocation, child: const Text('Reintentar ubicación')),
-      );
-    }
-
-    final snapshot = c.snapshot;
-    if (snapshot == null) {
-      if (c.error != null) {
-        return _Message(
-          icon: Icons.cloud_off,
-          text: '${c.error}',
-          action: FilledButton(onPressed: c.refresh, child: const Text('Reintentar')),
-        );
-      }
-      return const _Message(icon: Icons.local_gas_station, text: 'Descargando precios…', busy: true);
-    }
-
+    final snapshot = c.snapshot!;
     final entries = c.entries;
-    if (entries.isEmpty) {
-      return _Message(
-        icon: Icons.search_off,
-        text: c.query.isEmpty
-            ? 'Ninguna gasolinera de esta zona vende ${c.fuel.label}.'
-            : 'Sin resultados para "${c.query}".',
-      );
-    }
-
     final prices = entries.map((e) => e.price);
     final minPrice = prices.reduce((a, b) => a < b ? a : b);
     final maxPrice = prices.reduce((a, b) => a > b ? a : b);
@@ -222,7 +274,9 @@ class _Message extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            busy ? const CircularProgressIndicator() : Icon(icon, size: 48, color: Theme.of(context).hintColor),
+            busy
+                ? const CircularProgressIndicator()
+                : Icon(icon, size: 48, color: Theme.of(context).hintColor),
             const SizedBox(height: 16),
             Text(text, textAlign: TextAlign.center),
             if (action != null) ...[const SizedBox(height: 16), action!],
