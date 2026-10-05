@@ -1,4 +1,4 @@
-﻿# Compila la versiÃ³n web y la publica en GitHub Pages en cada push a main.
+# Compila la versión web y la publica en GitHub Pages en cada push a main.
 # URL: https://carlosss05.github.io/Gasolineras/
 name: Publicar web
 
