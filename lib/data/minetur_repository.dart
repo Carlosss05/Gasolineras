@@ -65,7 +65,11 @@ class MineturRepository implements FuelPriceRepository {
     return _inFlight[key] ??= _fetchStations(scope).then((snapshot) {
       _cache[key] = snapshot;
       return snapshot;
-    }).whenComplete(() => _inFlight.remove(key));
+    }).whenComplete(() {
+      // Con llaves a propósito: si el callback devolviera el Future eliminado,
+      // whenComplete esperaría a ese mismo Future y nunca terminaría.
+      _inFlight.remove(key);
+    });
   }
 
   Future<PriceSnapshot> _fetchStations(SearchScope scope) async {
