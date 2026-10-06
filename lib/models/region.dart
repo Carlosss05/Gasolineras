@@ -33,14 +33,14 @@ class SearchScope {
 
   /// Dos zonas con la misma clave devuelven los mismos datos.
   String get cacheKey => switch (kind) {
-        ScopeKind.spain => 'ES',
-        ScopeKind.community => 'C$id',
-        ScopeKind.myProvince || ScopeKind.province => 'P$id',
-      };
+    ScopeKind.spain => 'ES',
+    ScopeKind.community => 'C$id',
+    ScopeKind.myProvince || ScopeKind.province => 'P$id',
+  };
 
   String get label => switch (kind) {
-        ScopeKind.myProvince => 'Mi provincia · $name',
-        ScopeKind.spain => 'Toda España',
-        _ => name,
-      };
+    ScopeKind.myProvince => 'Mi provincia · $name',
+    ScopeKind.spain => 'Toda España',
+    _ => name,
+  };
 }

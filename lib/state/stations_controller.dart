@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/fuel_price_repository.dart';
 import '../models/fuel_type.dart';
@@ -112,23 +114,64 @@ class StationsController extends ChangeNotifier {
     _refreshTimer = Timer.periodic(_autoRefreshEvery, (_) => refresh(silent: true));
     unawaited(_loadRegions());
 
-    locating = true;
-    _notify();
-    locationEnabled = await _location.ensurePermission();
-    if (locationEnabled) {
-      _positionSub = _location.watch().listen(_onPosition, onError: (_) {});
-      final first = await _location.current();
-      if (first != null) await _onPosition(first);
-    }
-    locating = false;
-    _notify();
+    // La última zona usada se muestra al instante, sin esperar al GPS; si
+    // era "mi provincia", la ubicación la corrige después si has cambiado.
+    final saved = await _restoreScope();
+    if (saved != null && _scope == null) unawaited(setScope(saved));
+
+    await _startLocation();
   }
 
   Future<void> retryLocation() async {
     await _positionSub?.cancel();
     _positionSub = null;
     _lastProvinceCheck = null;
-    await init();
+    await _startLocation();
+  }
+
+  Future<void> _startLocation() async {
+    locating = true;
+    _notify();
+    try {
+      locationEnabled = await _location.ensurePermission();
+      if (locationEnabled) {
+        _positionSub = _location.watch().listen(_onPosition, onError: (_) {});
+        final first = await _location.current();
+        if (first != null) await _onPosition(first);
+      }
+    } finally {
+      locating = false;
+      _notify();
+    }
+  }
+
+  static const _scopeKey = 'scope.v1';
+
+  Future<SearchScope?> _restoreScope() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_scopeKey);
+      if (raw == null) return null;
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      final id = j['id'] as String, name = j['name'] as String;
+      return switch (ScopeKind.values.byName(j['kind'] as String)) {
+        ScopeKind.myProvince => SearchScope.myProvince(id, name),
+        ScopeKind.province => SearchScope.province(id, name),
+        ScopeKind.community => SearchScope.community(id, name),
+        ScopeKind.spain => const SearchScope.spain(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveScope(SearchScope s) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_scopeKey, jsonEncode({'kind': s.kind.name, 'id': s.id, 'name': s.name}));
+    } catch (_) {
+      // No es grave: la próxima vez se pedirá la zona otra vez.
+    }
   }
 
   void setFuel(FuelType fuel) {
@@ -150,7 +193,15 @@ class StationsController extends ChangeNotifier {
   }
 
   Future<void> setScope(SearchScope scope) async {
+    final sameData = _scope?.cacheKey == scope.cacheKey && _snapshot != null;
     _scope = scope;
+    unawaited(_saveScope(scope));
+    if (sameData) {
+      // Misma zona (p. ej. el GPS confirma la provincia guardada): no hace
+      // falta volver a descargar ni vaciar la lista.
+      _notify();
+      return;
+    }
     _snapshot = null;
     _invalidate();
     await _load();
@@ -191,7 +242,8 @@ class StationsController extends ChangeNotifier {
     _invalidate();
 
     final last = _lastProvinceCheck;
-    final moved = last == null ||
+    final moved =
+        last == null ||
         Geolocator.distanceBetween(last.latitude, last.longitude, p.latitude, p.longitude) >
             _provinceRecheckMeters;
     if (!moved || _checkingProvince) return;

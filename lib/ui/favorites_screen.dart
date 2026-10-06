@@ -61,8 +61,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(32),
-                      child: Text('Aún no tienes favoritas.\nPulsa la estrella de una gasolinera para guardarla.',
-                          textAlign: TextAlign.center),
+                      child: Text(
+                        'Aún no tienes favoritas.\nPulsa la estrella de una gasolinera para guardarla.',
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   )
                 : FutureBuilder<List<Station>>(
@@ -70,11 +72,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     builder: (context, snap) {
                       if (snap.hasError) {
                         return Center(
-                          child: Column(mainAxisSize: MainAxisSize.min, children: [
-                            Text('${snap.error}'),
-                            const SizedBox(height: 12),
-                            FilledButton(onPressed: _reload, child: const Text('Reintentar')),
-                          ]),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('${snap.error}'),
+                              const SizedBox(height: 12),
+                              FilledButton(onPressed: _reload, child: const Text('Reintentar')),
+                            ],
+                          ),
                         );
                       }
                       if (!snap.hasData) return const Center(child: CircularProgressIndicator());

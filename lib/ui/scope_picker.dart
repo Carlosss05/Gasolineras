@@ -25,12 +25,16 @@ Future<void> showScopePicker(BuildContext context) async {
             ListTile(
               leading: const Icon(Icons.my_location),
               title: const Text('Mi provincia'),
-              subtitle: Text(c.myProvinceName != null
-                  ? '${c.myProvinceName} · se actualiza al moverte'
-                  : 'Activa la ubicación para detectarla'),
+              subtitle: Text(
+                c.myProvinceName != null
+                    ? '${c.myProvinceName} · se actualiza al moverte'
+                    : 'Activa la ubicación para detectarla',
+              ),
               enabled: c.myProvinceId != null,
               onTap: () => Navigator.pop(
-                  context, SearchScope.myProvince(c.myProvinceId!, c.myProvinceName ?? c.myProvinceId!)),
+                context,
+                SearchScope.myProvince(c.myProvinceId!, c.myProvinceName ?? c.myProvinceId!),
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.map_outlined),
@@ -49,7 +53,9 @@ Future<void> showScopePicker(BuildContext context) async {
                 await c.ensureRegions();
                 if (!context.mounted) return;
                 final cc = await _pick(context, 'Comunidad autónoma', c.communities, (c) => c.name);
-                if (cc != null && context.mounted) Navigator.pop(context, SearchScope.community(cc.id, cc.name));
+                if (cc != null && context.mounted) {
+                  Navigator.pop(context, SearchScope.community(cc.id, cc.name));
+                }
               },
             ),
             ListTile(
@@ -69,14 +75,16 @@ Future<void> showScopePicker(BuildContext context) async {
 
 Future<T?> _pick<T>(BuildContext context, String title, List<T> items, String Function(T) nameOf) {
   if (items.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No se ha podido cargar el listado. Revisa tu conexión.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('No se ha podido cargar el listado. Revisa tu conexión.')));
     return Future.value();
   }
   return Navigator.push<T>(
     context,
-    MaterialPageRoute(builder: (_) => _RegionListPage<T>(title: title, items: items, nameOf: nameOf)),
+    MaterialPageRoute(
+      builder: (_) => _RegionListPage<T>(title: title, items: items, nameOf: nameOf),
+    ),
   );
 }
 

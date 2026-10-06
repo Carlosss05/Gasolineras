@@ -73,7 +73,7 @@ class Station {
 /// publicó esos precios.
 class PriceSnapshot {
   PriceSnapshot({required this.stations, required this.publishedAt, DateTime? fetchedAt})
-      : fetchedAt = fetchedAt ?? DateTime.now();
+    : fetchedAt = fetchedAt ?? DateTime.now();
 
   final List<Station> stations;
   final DateTime? publishedAt;

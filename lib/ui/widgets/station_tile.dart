@@ -6,6 +6,7 @@ import '../../models/fuel_type.dart';
 import '../../models/station.dart';
 import '../../state/favorites_controller.dart';
 import '../format.dart';
+import 'brand_badge.dart';
 
 class StationTile extends StatelessWidget {
   const StationTile({
@@ -34,6 +35,7 @@ class StationTile extends StatelessWidget {
     return ListTile(
       onTap: () => showStationDetails(context, station, distanceKm),
       contentPadding: const EdgeInsets.only(left: 16, right: 4),
+      leading: BrandBadge(brand: station.brand),
       title: Text(
         station.brand.isEmpty ? 'Sin marca' : station.brand,
         maxLines: 1,
@@ -88,9 +90,27 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(station.brand.isEmpty ? 'Sin marca' : station.brand, style: theme.textTheme.titleLarge),
-              const SizedBox(height: 4),
-              Text('${station.address}\n${station.postalCode} ${station.municipality} (${station.province})'),
+              Row(
+                children: [
+                  BrandBadge(brand: station.brand, size: 52),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          station.brand.isEmpty ? 'Sin marca' : station.brand,
+                          style: theme.textTheme.titleLarge,
+                        ),
+                        Text(
+                          '${station.address}\n${station.postalCode} ${station.municipality} '
+                          '(${station.province})',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               if (station.schedule.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text('Horario: ${station.schedule}', style: theme.textTheme.bodySmall),
@@ -125,8 +145,10 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
                       icon: const Icon(Icons.directions),
                       label: const Text('Cómo llegar'),
                       onPressed: () => launchUrl(
-                        Uri.parse('https://www.google.com/maps/dir/?api=1'
-                            '&destination=${station.latitude},${station.longitude}'),
+                        Uri.parse(
+                          'https://www.google.com/maps/dir/?api=1'
+                          '&destination=${station.latitude},${station.longitude}',
+                        ),
                         mode: LaunchMode.externalApplication,
                       ),
                     ),

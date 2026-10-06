@@ -181,7 +181,10 @@ Widget? _statusView(BuildContext context, StationsController c) {
     }
     return _Message(
       icon: Icons.location_off_outlined,
-      text: 'No hemos podido detectar tu provincia.\nElige una zona para ver precios.',
+      text: c.locationEnabled
+          ? 'No hemos podido detectar tu provincia.\nElige una zona para ver precios.'
+          : 'La app no tiene permiso para usar tu ubicación.\n'
+                'Actívalo en los ajustes del navegador o del móvil, o elige una zona.',
       action: FilledButton(onPressed: () => showScopePicker(context), child: const Text('Elegir zona')),
       secondary: TextButton(onPressed: c.retryLocation, child: const Text('Reintentar ubicación')),
     );

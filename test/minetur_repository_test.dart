@@ -45,8 +45,7 @@ void main() {
     );
     const albacete = SearchScope.province('02', 'Albacete');
 
-    await Future.wait([repo.stations(albacete), repo.stations(albacete)])
-        .timeout(const Duration(seconds: 5));
+    await Future.wait([repo.stations(albacete), repo.stations(albacete)]).timeout(const Duration(seconds: 5));
     expect(calls, 1);
   });
 }

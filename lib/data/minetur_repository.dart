@@ -12,10 +12,9 @@ import 'fuel_price_repository.dart';
 /// de gasolineras). Pública, gratuita y sin clave; se actualiza cada ~30 min.
 class MineturRepository implements FuelPriceRepository {
   MineturRepository({http.Client? client, this.cacheTtl = const Duration(minutes: 5)})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
-  static const _base =
-      'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes';
+  static const _base = 'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes';
 
   final http.Client _client;
   final Duration cacheTtl;
@@ -26,31 +25,37 @@ class MineturRepository implements FuelPriceRepository {
   Future<List<Community>>? _communities;
 
   @override
-  Future<List<Province>> provinces() => _provinces ??= _getJson('$_base/Listados/Provincias/').then((json) {
-        final list = (json as List)
-            .cast<Map<String, dynamic>>()
-            .map((p) => Province(
-                  // Sí, la API lo escribe "IDPovincia".
-                  id: '${p['IDPovincia']}',
-                  name: prettyName('${p['Provincia']}'),
-                  communityId: '${p['IDCCAA']}',
-                ))
-            .toList()
-          ..sort((a, b) => normalize(a.name).compareTo(normalize(b.name)));
+  Future<List<Province>> provinces() => _provinces ??= _getJson('$_base/Listados/Provincias/')
+      .then((json) {
+        final list =
+            (json as List)
+                .cast<Map<String, dynamic>>()
+                .map(
+                  (p) => Province(
+                    // Sí, la API lo escribe "IDPovincia".
+                    id: '${p['IDPovincia']}',
+                    name: prettyName('${p['Provincia']}'),
+                    communityId: '${p['IDCCAA']}',
+                  ),
+                )
+                .toList()
+              ..sort((a, b) => normalize(a.name).compareTo(normalize(b.name)));
         return list;
-      }).catchError((Object e) {
+      })
+      .catchError((Object e) {
         _provinces = null;
         throw e;
       });
 
   @override
-  Future<List<Community>> communities() =>
-      _communities ??= _getJson('$_base/Listados/ComunidadesAutonomas/').then((json) {
+  Future<List<Community>> communities() => _communities ??= _getJson('$_base/Listados/ComunidadesAutonomas/')
+      .then((json) {
         return (json as List)
             .cast<Map<String, dynamic>>()
             .map((c) => Community(id: '${c['IDCCAA']}', name: '${c['CCAA']}'))
             .toList();
-      }).catchError((Object e) {
+      })
+      .catchError((Object e) {
         _communities = null;
         throw e;
       });
@@ -62,14 +67,16 @@ class MineturRepository implements FuelPriceRepository {
     if (!forceRefresh && cached != null && DateTime.now().difference(cached.fetchedAt) < cacheTtl) {
       return Future.value(cached);
     }
-    return _inFlight[key] ??= _fetchStations(scope).then((snapshot) {
-      _cache[key] = snapshot;
-      return snapshot;
-    }).whenComplete(() {
-      // Con llaves a propósito: si el callback devolviera el Future eliminado,
-      // whenComplete esperaría a ese mismo Future y nunca terminaría.
-      _inFlight.remove(key);
-    });
+    return _inFlight[key] ??= _fetchStations(scope)
+        .then((snapshot) {
+          _cache[key] = snapshot;
+          return snapshot;
+        })
+        .whenComplete(() {
+          // Con llaves a propósito: si el callback devolviera el Future eliminado,
+          // whenComplete esperaría a ese mismo Future y nunca terminaría.
+          _inFlight.remove(key);
+        });
   }
 
   Future<PriceSnapshot> _fetchStations(SearchScope scope) async {

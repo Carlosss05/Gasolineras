@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../state/stations_controller.dart';
 import 'format.dart';
+import 'widgets/brand_badge.dart';
 import 'widgets/station_tile.dart';
 
 /// Mapa con las gasolineras de [entries], ya filtradas y ordenadas.
@@ -106,10 +107,11 @@ class _StationsMapState extends State<StationsMap> {
                 for (final e in inView.reversed)
                   Marker(
                     point: _point(e),
-                    width: 66,
+                    width: 92,
                     height: 34,
                     alignment: Alignment.topCenter,
                     child: _PriceMarker(
+                      brand: e.station.brand,
                       price: e.price,
                       color: priceColor(e.price, minPrice, maxPrice),
                       isBest: identical(e, inView.first) && widget.sort == SortMode.price,
@@ -182,7 +184,15 @@ class _StationsMapState extends State<StationsMap> {
 
 /// Etiqueta con el precio y un piquito que apunta a la gasolinera.
 class _PriceMarker extends StatelessWidget {
-  const _PriceMarker({required this.price, required this.color, required this.isBest, required this.onTap});
+  const _PriceMarker({
+    required this.brand,
+    required this.price,
+    required this.color,
+    required this.isBest,
+    required this.onTap,
+  });
+
+  final String brand;
 
   final double price;
   final Color color;
@@ -197,7 +207,7 @@ class _PriceMarker extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            padding: const EdgeInsets.fromLTRB(3, 3, 6, 3),
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(8),
@@ -207,6 +217,8 @@ class _PriceMarker extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                BrandBadge(brand: brand, size: 18),
+                const SizedBox(width: 4),
                 if (isBest) const Icon(Icons.emoji_events, size: 12, color: Colors.white),
                 Text(
                   formatPrice(price).replaceAll(' €', ''),
