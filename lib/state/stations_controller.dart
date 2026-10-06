@@ -6,13 +6,17 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/fuel_price_repository.dart';
+import '../logic/savings.dart';
+import '../models/car.dart';
 import '../models/fuel_type.dart';
 import '../models/region.dart';
 import '../models/station.dart';
 import '../services/location_service.dart';
 import '../utils/text.dart';
 
-enum SortMode { price, distance }
+/// [value]: coste real de llenar el depósito (combustible + viaje de ida y
+/// vuelta); necesita el coche y la ubicación.
+enum SortMode { price, distance, value }
 
 class StationEntry {
   const StationEntry(this.station, this.price, this.distanceKm);
@@ -31,6 +35,7 @@ List<StationEntry> buildEntries(
   ({double lat, double lng})? position,
   String query = '',
   String? municipalityId,
+  CarProfile? car,
 }) {
   final q = normalize(query.trim());
   final list = <StationEntry>[];
@@ -49,9 +54,14 @@ List<StationEntry> buildEntries(
   int byDistance(StationEntry a, StationEntry b) =>
       (a.distanceKm ?? double.infinity).compareTo(b.distanceKm ?? double.infinity);
 
-  final (first, second) = sort == SortMode.distance && position != null
-      ? (byDistance, byPrice)
-      : (byPrice, byDistance);
+  final (first, second) = switch (sort) {
+    SortMode.distance when position != null => (byDistance, byPrice),
+    SortMode.value when position != null && car != null => (
+      (StationEntry a, StationEntry b) => effectiveCost(a, car).compareTo(effectiveCost(b, car)),
+      byPrice,
+    ),
+    _ => (byPrice, byDistance),
+  };
   list.sort((a, b) {
     final c = first(a, b);
     return c != 0 ? c : second(a, b);
@@ -172,6 +182,7 @@ class StationsController extends ChangeNotifier {
   FuelType _fuel = FuelType.gasolina95;
   SortMode _sort = SortMode.price;
   String _query = '';
+  CarProfile? _car;
 
   Position? _position;
   Position? _lastProvinceCheck;
@@ -215,6 +226,7 @@ class StationsController extends ChangeNotifier {
           position: _position == null ? null : (lat: _position!.latitude, lng: _position!.longitude),
           query: _query,
           municipalityId: _scope?.kind == ScopeKind.myTown ? _scope!.townId : null,
+          car: _car,
         );
 
   Future<void> init() async {
@@ -290,6 +302,16 @@ class StationsController extends ChangeNotifier {
   void setFuel(FuelType fuel) {
     if (fuel == _fuel) return;
     _fuel = fuel;
+    _invalidate();
+  }
+
+  CarProfile? get car => _car;
+
+  /// Coche del usuario: fija su combustible y permite ordenar por coste real.
+  void setCar(CarProfile? car, {bool applyFuel = true}) {
+    _car = car;
+    if (car != null && applyFuel) _fuel = car.fuel;
+    if (car == null && _sort == SortMode.value) _sort = SortMode.price;
     _invalidate();
   }
 
