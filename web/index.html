@@ -50,6 +50,34 @@
       animation: slide 1.1s ease-in-out infinite;
     }
     @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+    #splash { z-index: 2; }
+
+    /* Contenedor de la app: por debajo de la barra de estado y del "notch"
+       del iPhone; esa franja queda del verde de la marca. */
+    #app {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      top: env(safe-area-inset-top, 0px);
+    }
+
+    /* Aviso para instalar la app en iPhone (Safari no lo sugiere solo). */
+    #install {
+      position: fixed; left: 12px; right: 12px; z-index: 3;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      display: none; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;
+      background: #13221C; color: #fff; border-radius: 18px;
+      box-shadow: 0 12px 32px rgba(0,0,0,.3);
+      font: 500 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      animation: rise .35s ease-out;
+    }
+    #install.show { display: flex; }
+    #install img { width: 44px; height: 44px; border-radius: 12px; flex: none; }
+    #install b { color: #F5A524; }
+    #install svg { width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: #F5A524; stroke-width: 2; }
+    #install button {
+      flex: none; width: 32px; height: 32px; border: 0; border-radius: 16px; cursor: pointer;
+      background: rgba(255,255,255,.12); color: #fff; font-size: 18px; line-height: 32px;
+    }
+    @keyframes rise { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
   </style>
 </head>
 <body>
@@ -58,6 +86,34 @@
     <div>Buscando los mejores precios…</div>
     <div class="bar"></div>
   </div>
+  <div id="app"></div>
+  <div id="install" role="dialog" aria-label="Instalar la app">
+    <img src="icons/Icon-192.png" alt="">
+    <div>
+      <b>Instala Gasolineras</b><br>
+      Pulsa <svg viewBox="0 0 24 24" aria-label="Compartir"><path d="M12 3v12M7 8l5-5 5 5M5 12v8h14v-8"/></svg>
+      y luego «Añadir a pantalla de inicio».
+    </div>
+    <button type="button" aria-label="Cerrar">×</button>
+  </div>
+  <script>
+    (function () {
+      var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var installed = navigator.standalone === true ||
+        window.matchMedia('(display-mode: standalone)').matches;
+      var dismissed = false;
+      try { dismissed = localStorage.getItem('install-dismissed') === '1'; } catch (e) {}
+      if (!ios || installed || dismissed) return;
+
+      var banner = document.getElementById('install');
+      banner.querySelector('button').addEventListener('click', function () {
+        banner.classList.remove('show');
+        try { localStorage.setItem('install-dismissed', '1'); } catch (e) {}
+      });
+      setTimeout(function () { banner.classList.add('show'); }, 4000);
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

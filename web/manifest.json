@@ -1,7 +1,10 @@
 {
+    "id": "/Gasolineras/",
     "name": "Gasolineras baratas",
     "short_name": "Gasolineras",
+    "lang": "es",
     "start_url": ".",
+    "scope": ".",
     "display": "standalone",
     "background_color": "#0B8F5A",
     "theme_color": "#0B8F5A",

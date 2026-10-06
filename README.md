@@ -41,7 +41,7 @@ Encuentra la gasolinera más barata de tu pueblo con precios oficiales actualiza
 
 ## 📲 Instalación
 
-**iPhone (y cualquier móvil):** abre **[carlosss05.github.io/Gasolineras](https://carlosss05.github.io/Gasolineras/)** en Safari, pulsa *Compartir → Añadir a pantalla de inicio* y se abrirá como una app a pantalla completa.
+**iPhone (y cualquier móvil):** abre **[carlosss05.github.io/Gasolineras](https://carlosss05.github.io/Gasolineras/)** en Safari, pulsa *Compartir → Añadir a pantalla de inicio* y se abrirá como una app a pantalla completa. Funciona también **sin conexión**, con los últimos precios descargados.
 
 **Android:** descarga el `.apk` de la **[última versión](https://github.com/Carlosss05/Gasolineras/releases/latest)** y ábrelo. La primera vez Android te pedirá permitir instalar apps desde el navegador. Las actualizaciones se instalan encima sin perder tus favoritas.
 
