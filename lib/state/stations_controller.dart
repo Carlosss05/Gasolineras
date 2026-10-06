@@ -30,12 +30,14 @@ List<StationEntry> buildEntries(
   required SortMode sort,
   ({double lat, double lng})? position,
   String query = '',
+  String? municipalityId,
 }) {
   final q = normalize(query.trim());
   final list = <StationEntry>[];
   for (final s in stations) {
     final price = s.prices[fuel];
     if (price == null) continue;
+    if (municipalityId != null && s.municipalityId != municipalityId) continue;
     if (q.isNotEmpty && !s.searchText.contains(q)) continue;
     final d = position == null
         ? null
@@ -55,6 +57,45 @@ List<StationEntry> buildEntries(
     return c != 0 ? c : second(a, b);
   });
   return list;
+}
+
+final _parenthesis = RegExp(r'\(.*?\)');
+final _leadingArticle = RegExp(r"^(l'|(el|la|los|las|els|les|es|sa|o|a)\s+)");
+
+/// Formas comparables de un nombre de municipio: "Elche/Elx" -> {elche, elx};
+/// "Alfàs del Pi (l')" y "l'Alfàs del Pi" -> {alfas del pi}.
+Set<String> _townForms(String name) => {
+  for (final part in normalize(name).replaceAll(_parenthesis, '').split('/'))
+    if (part.trim().replaceFirst(_leadingArticle, '').trim() case final f when f.isNotEmpty) f,
+};
+
+/// Municipio (código y nombre) de [stations] que corresponde a [townNames].
+///
+/// Si ningún nombre coincide (pedanía, urbanización…), se usa el de la
+/// gasolinera más cercana siempre que esté a menos de [maxFallbackKm].
+({String id, String name})? resolveTown(
+  List<Station> stations,
+  List<String> townNames, {
+  required double lat,
+  required double lng,
+  double maxFallbackKm = 5,
+}) {
+  final wanted = townNames.expand(_townForms).toSet();
+  Station? nearest;
+  var nearestKm = double.infinity;
+  for (final s in stations) {
+    if (s.municipalityId.isEmpty) continue;
+    if (_townForms(s.municipality).any(wanted.contains)) {
+      return (id: s.municipalityId, name: s.municipality.split('/').first.trim());
+    }
+    final d = LocationService.distanceKm(lat, lng, s.latitude, s.longitude);
+    if (d < nearestKm) {
+      nearestKm = d;
+      nearest = s;
+    }
+  }
+  if (nearest == null || nearestKm > maxFallbackKm) return null;
+  return (id: nearest.municipalityId, name: nearest.municipality.split('/').first.trim());
 }
 
 /// Lugar fuera de la zona actual que coincide con lo que se busca.
@@ -77,11 +118,13 @@ List<PlaceSuggestion> findPlaces(
   int limit = 6,
 }) {
   final q = normalize(query.trim());
-  bool outside(String provinceId, String communityId) => switch (current?.kind) {
+  bool outside(String provinceId, String communityId, [String? townId]) => switch (current?.kind) {
     null => true,
     ScopeKind.spain => false,
     ScopeKind.community => current!.id != communityId,
     ScopeKind.province || ScopeKind.myProvince => current!.id != provinceId,
+    // En "mi pueblo" cualquier otro municipio (o un CP) está fuera.
+    ScopeKind.myTown => townId == null || current!.townId != townId,
   };
 
   if (RegExp(r'^\d{5}$').hasMatch(q)) {
@@ -97,7 +140,7 @@ List<PlaceSuggestion> findPlaces(
   final startsWith = <Municipality>[];
   final contains = <Municipality>[];
   for (final m in municipalities) {
-    if (!outside(m.provinceId, m.communityId)) continue;
+    if (!outside(m.provinceId, m.communityId, m.id)) continue;
     // Nombres bilingües: "Calpe/Calp" debe encontrarse por cualquiera de los dos.
     final names = normalize(m.name).split('/').map((n) => n.trim());
     if (names.any((n) => n.startsWith(q))) {
@@ -119,8 +162,8 @@ class StationsController extends ChangeNotifier {
 
   static const _autoRefreshEvery = Duration(minutes: 10);
 
-  /// Distancia que hay que recorrer antes de volver a comprobar la provincia.
-  static const _provinceRecheckMeters = 3000.0;
+  /// Distancia que hay que recorrer antes de volver a comprobar pueblo y provincia.
+  static const _provinceRecheckMeters = 1500.0;
 
   final FuelPriceRepository _repo;
   final LocationService _location;
@@ -137,6 +180,9 @@ class StationsController extends ChangeNotifier {
   bool locationEnabled = false;
   String? myProvinceId;
   String? myProvinceName;
+  String? myTownId;
+  String? myTownName;
+  bool _provinceChosenByUser = false;
 
   PriceSnapshot? _snapshot;
   bool loading = false;
@@ -168,6 +214,7 @@ class StationsController extends ChangeNotifier {
           sort: _sort,
           position: _position == null ? null : (lat: _position!.latitude, lng: _position!.longitude),
           query: _query,
+          municipalityId: _scope?.kind == ScopeKind.myTown ? _scope!.townId : null,
         );
 
   Future<void> init() async {
@@ -215,6 +262,9 @@ class StationsController extends ChangeNotifier {
       final j = jsonDecode(raw) as Map<String, dynamic>;
       final id = j['id'] as String, name = j['name'] as String;
       return switch (ScopeKind.values.byName(j['kind'] as String)) {
+        ScopeKind.myTown when j['townId'] is String => SearchScope.myTown(id, j['townId'] as String, name),
+        // Formato antiguo sin municipio: se queda en la provincia.
+        ScopeKind.myTown => SearchScope.myProvince(id, name),
         ScopeKind.myProvince => SearchScope.myProvince(id, name),
         ScopeKind.province => SearchScope.province(id, name),
         ScopeKind.community => SearchScope.community(id, name),
@@ -228,7 +278,10 @@ class StationsController extends ChangeNotifier {
   Future<void> _saveScope(SearchScope s) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_scopeKey, jsonEncode({'kind': s.kind.name, 'id': s.id, 'name': s.name}));
+      await prefs.setString(
+        _scopeKey,
+        jsonEncode({'kind': s.kind.name, 'id': s.id, 'name': s.name, 'townId': ?s.townId}),
+      );
     } catch (_) {
       // No es grave: la próxima vez se pedirá la zona otra vez.
     }
@@ -257,9 +310,9 @@ class StationsController extends ChangeNotifier {
     _scope = scope;
     unawaited(_saveScope(scope));
     if (sameData) {
-      // Misma zona (p. ej. el GPS confirma la provincia guardada): no hace
-      // falta volver a descargar ni vaciar la lista.
-      _notify();
+      // Mismos datos (misma provincia, quizá otro municipio): no hace falta
+      // volver a descargar ni vaciar la lista, solo volver a filtrar.
+      _invalidate();
       return;
     }
     _snapshot = null;
@@ -270,6 +323,18 @@ class StationsController extends ChangeNotifier {
   Future<void> useMyProvince() async {
     if (myProvinceId == null) return;
     await setScope(SearchScope.myProvince(myProvinceId!, myProvinceName ?? myProvinceId!));
+  }
+
+  /// Zona elegida a mano en el selector. Solo entonces "Mi provincia" se
+  /// respeta al moverse; la guardada de otras sesiones pasa a "Mi pueblo".
+  Future<void> chooseScope(SearchScope scope) {
+    _provinceChosenByUser = scope.kind == ScopeKind.myProvince;
+    return setScope(scope);
+  }
+
+  Future<void> useMyTown() async {
+    if (myProvinceId == null || myTownId == null) return;
+    await setScope(SearchScope.myTown(myProvinceId!, myTownId!, myTownName ?? myTownId!));
   }
 
   Future<void> refresh({bool silent = false}) => _load(force: true, silent: silent);
@@ -310,16 +375,47 @@ class StationsController extends ChangeNotifier {
 
     _checkingProvince = true;
     try {
-      final id = await _location.provinceIdAt(p.latitude, p.longitude);
+      final place = await _location.placeAt(p.latitude, p.longitude);
       _lastProvinceCheck = p;
-      if (id == null || id == myProvinceId) return;
-      myProvinceId = id;
-      myProvinceName = await _provinceName(id);
-      // Al cambiar de provincia se recargan los precios si seguimos "mi provincia".
-      if (_scope == null || _scope!.followsLocation) await useMyProvince();
+      if (place == null) return;
+      if (place.provinceId != myProvinceId) {
+        myProvinceId = place.provinceId;
+        myProvinceName = await _provinceName(place.provinceId);
+      }
+      await _resolveMyTown(place, p);
+
+      // Si seguimos la ubicación, se pasa al pueblo (o provincia) actual.
+      final s = _scope;
+      final followTown =
+          s == null ||
+          s.kind == ScopeKind.myTown ||
+          (s.kind == ScopeKind.myProvince && !_provinceChosenByUser);
+      if (followTown) {
+        if (myTownId != null) {
+          await useMyTown();
+        } else {
+          await useMyProvince();
+        }
+      } else if (s.kind == ScopeKind.myProvince && s.id != myProvinceId) {
+        await useMyProvince();
+      }
       _notify();
     } finally {
       _checkingProvince = false;
+    }
+  }
+
+  /// Averigua el municipio con las gasolineras de la provincia (que se
+  /// reutilizan después para mostrarlas, así que no hay descarga extra).
+  Future<void> _resolveMyTown(DetectedPlace place, Position p) async {
+    try {
+      final snapshot = await _repo.stations(SearchScope.province(place.provinceId, ''));
+      final town = resolveTown(snapshot.stations, place.townNames, lat: p.latitude, lng: p.longitude);
+      myTownId = town?.id;
+      myTownName = town?.name;
+    } catch (_) {
+      myTownId = null;
+      myTownName = null;
     }
   }
 

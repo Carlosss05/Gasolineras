@@ -7,6 +7,7 @@ class Station {
     required this.brand,
     required this.address,
     required this.municipality,
+    this.municipalityId = '',
     this.locality = '',
     required this.province,
     required this.provinceId,
@@ -22,6 +23,9 @@ class Station {
   final String brand;
   final String address;
   final String municipality;
+
+  /// Código de municipio del Ministerio ("187" = Calpe/Calp).
+  final String municipalityId;
 
   /// Núcleo de población (pedanía, urbanización…), p. ej. "La Zenia".
   final String locality;
@@ -55,6 +59,7 @@ class Station {
       brand: prettyName('${j['Rótulo'] ?? ''}'),
       address: prettyName('${j['Dirección'] ?? ''}'),
       municipality: prettyName('${j['Municipio'] ?? ''}'),
+      municipalityId: '${j['IDMunicipio'] ?? ''}',
       locality: prettyName('${j['Localidad'] ?? ''}'),
       province: prettyName('${j['Provincia'] ?? ''}'),
       provinceId: '${j['IDProvincia'] ?? ''}',

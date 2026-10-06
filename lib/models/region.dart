@@ -31,11 +31,16 @@ class Municipality {
   final String communityId;
 }
 
-enum ScopeKind { myProvince, province, community, spain }
+enum ScopeKind { myTown, myProvince, province, community, spain }
 
 /// Zona sobre la que se buscan gasolineras.
 class SearchScope {
-  const SearchScope._(this.kind, this.id, this.name);
+  const SearchScope._(this.kind, this.id, this.name, [this.townId]);
+
+  /// Municipio detectado a partir de la ubicación ([id] es su provincia y
+  /// [townId] el código de municipio del Ministerio); cambia al moverse.
+  const SearchScope.myTown(String provinceId, String townId, String name)
+    : this._(ScopeKind.myTown, provinceId, name, townId);
 
   /// Provincia detectada a partir de la ubicación; se actualiza al moverse.
   const SearchScope.myProvince(String id, String name) : this._(ScopeKind.myProvince, id, name);
@@ -47,16 +52,21 @@ class SearchScope {
   final String id;
   final String name;
 
-  bool get followsLocation => kind == ScopeKind.myProvince;
+  /// Solo en [ScopeKind.myTown]: municipio por el que se filtra.
+  final String? townId;
 
-  /// Dos zonas con la misma clave devuelven los mismos datos.
+  bool get followsLocation => kind == ScopeKind.myTown || kind == ScopeKind.myProvince;
+
+  /// Dos zonas con la misma clave devuelven los mismos datos. Un municipio
+  /// reutiliza la descarga de su provincia y se filtra después.
   String get cacheKey => switch (kind) {
     ScopeKind.spain => 'ES',
     ScopeKind.community => 'C$id',
-    ScopeKind.myProvince || ScopeKind.province => 'P$id',
+    ScopeKind.myTown || ScopeKind.myProvince || ScopeKind.province => 'P$id',
   };
 
   String get label => switch (kind) {
+    ScopeKind.myTown => 'Mi pueblo · $name',
     ScopeKind.myProvince => 'Mi provincia · $name',
     ScopeKind.spain => 'Toda España',
     _ => name,

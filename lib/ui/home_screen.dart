@@ -80,7 +80,7 @@ class FiltersBar extends StatelessWidget {
                 children: [
                   ActionChip(
                     avatar: Icon(
-                      scope?.kind == ScopeKind.myProvince ? Icons.my_location : Icons.place_outlined,
+                      scope?.followsLocation ?? false ? Icons.my_location : Icons.place_outlined,
                       size: 18,
                     ),
                     label: ConstrainedBox(
@@ -164,7 +164,7 @@ class _MapView extends StatelessWidget {
     final pos = c.position;
     return StationsMap(
       // Al cambiar de zona o combustible se vuelve a encuadrar el mapa.
-      key: ValueKey('${c.scope!.cacheKey}-${c.fuel.name}-${c.query}'),
+      key: ValueKey('${c.scope!.cacheKey}-${c.scope!.townId}-${c.fuel.name}-${c.query}'),
       entries: c.entries,
       userLocation: pos == null ? null : LatLng(pos.latitude, pos.longitude),
       sort: c.sort,
@@ -222,11 +222,20 @@ Widget? _statusView(BuildContext context, StationsController c) {
         ],
       );
     }
+    final inTown = c.scope!.kind == ScopeKind.myTown;
     return _Message(
       icon: Icons.search_off,
-      text: c.query.isEmpty
-          ? 'Ninguna gasolinera de esta zona vende ${c.fuel.label}.'
-          : 'Sin resultados para "${c.query}".',
+      text: c.query.isNotEmpty
+          ? 'Sin resultados para "${c.query}".'
+          : inTown
+          ? 'En ${c.scope!.name} no hay gasolineras con ${c.fuel.label}.'
+          : 'Ninguna gasolinera de esta zona vende ${c.fuel.label}.',
+      action: inTown && c.query.isEmpty
+          ? FilledButton(
+              onPressed: c.useMyProvince,
+              child: Text('Ver toda la provincia de ${c.myProvinceName}'),
+            )
+          : null,
     );
   }
   return null;

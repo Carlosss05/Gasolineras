@@ -23,6 +23,20 @@ Future<void> showScopePicker(BuildContext context) async {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Mi pueblo'),
+              subtitle: Text(
+                c.myTownName != null
+                    ? '${c.myTownName} · cambia al moverte'
+                    : 'Activa la ubicación para detectarlo',
+              ),
+              enabled: c.myTownId != null && c.myProvinceId != null,
+              onTap: () => Navigator.pop(
+                context,
+                SearchScope.myTown(c.myProvinceId!, c.myTownId!, c.myTownName ?? c.myTownId!),
+              ),
+            ),
+            ListTile(
               leading: const Icon(Icons.my_location),
               title: const Text('Mi provincia'),
               subtitle: Text(
@@ -70,7 +84,7 @@ Future<void> showScopePicker(BuildContext context) async {
     },
   );
 
-  if (scope != null) await controller.setScope(scope);
+  if (scope != null) await controller.chooseScope(scope);
 }
 
 Future<T?> _pick<T>(BuildContext context, String title, List<T> items, String Function(T) nameOf) {

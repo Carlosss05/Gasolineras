@@ -49,27 +49,32 @@ class LocationService {
     locationSettings: LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: distanceFilterMeters),
   );
 
-  /// Código de provincia (INE, "03" = Alicante) para unas coordenadas.
+  /// Provincia (código INE, "03" = Alicante) y nombres del municipio para
+  /// unas coordenadas.
   ///
   /// Primero prueba el geocodificador del sistema (Android/iOS). En la web no
   /// existe, así que se usa OpenStreetMap (Nominatim), que también sirve de
   /// respaldo si el del sistema falla.
-  Future<String?> provinceIdAt(double latitude, double longitude) async {
+  Future<DetectedPlace?> placeAt(double latitude, double longitude) async {
     if (!kIsWeb) {
       try {
         final marks = await _geocoding.placemarkFromCoordinates(latitude, longitude);
         for (final m in marks) {
           final id = provinceFromPostalCode(m.postalCode);
-          if (id != null) return id;
+          if (id == null) continue;
+          return DetectedPlace(id, [
+            for (final n in [m.locality, m.subLocality, m.subAdministrativeArea])
+              if (n != null && n.trim().isNotEmpty) n,
+          ]);
         }
       } catch (_) {
         // Sin servicio de geocodificación: se prueba con OpenStreetMap.
       }
     }
-    return _provinceFromNominatim(latitude, longitude);
+    return _placeFromNominatim(latitude, longitude);
   }
 
-  Future<String?> _provinceFromNominatim(double latitude, double longitude) async {
+  Future<DetectedPlace?> _placeFromNominatim(double latitude, double longitude) async {
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
         'format': 'jsonv2',
@@ -88,7 +93,7 @@ class LocationService {
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) return null;
       final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-      return provinceFromAddress((json['address'] as Map?)?.cast<String, dynamic>() ?? const {});
+      return placeFromAddress((json['address'] as Map?)?.cast<String, dynamic>() ?? const {});
     } catch (_) {
       return null;
     }
@@ -105,6 +110,24 @@ String? provinceFromPostalCode(String? postalCode) {
   final id = cp.substring(0, 2);
   final n = int.parse(id);
   return n >= 1 && n <= 52 ? id : null;
+}
+
+/// Lugar detectado: provincia y posibles nombres del municipio (pueden venir
+/// en otro idioma o con otra forma que en los datos del Ministerio).
+class DetectedPlace {
+  const DetectedPlace(this.provinceId, this.townNames);
+
+  final String provinceId;
+  final List<String> townNames;
+}
+
+DetectedPlace? placeFromAddress(Map<String, dynamic> address) {
+  final province = provinceFromAddress(address);
+  if (province == null) return null;
+  return DetectedPlace(province, [
+    for (final key in ['city', 'town', 'village', 'municipality'])
+      if (address[key] is String && (address[key] as String).trim().isNotEmpty) address[key] as String,
+  ]);
 }
 
 /// Provincia a partir de la dirección de Nominatim: código postal o, si no

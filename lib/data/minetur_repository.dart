@@ -94,7 +94,7 @@ class MineturRepository implements FuelPriceRepository {
     final filter = switch (scope.kind) {
       ScopeKind.spain => '',
       ScopeKind.community => 'FiltroCCAA/${scope.id}',
-      ScopeKind.myProvince || ScopeKind.province => 'FiltroProvincia/${scope.id}',
+      ScopeKind.myTown || ScopeKind.myProvince || ScopeKind.province => 'FiltroProvincia/${scope.id}',
     };
     final bytes = await _get('$_base/EstacionesTerrestres/$filter');
     // Toda España son ~12 MB de JSON: se procesa fuera del hilo de la UI.
