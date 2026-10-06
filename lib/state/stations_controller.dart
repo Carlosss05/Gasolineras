@@ -57,6 +57,63 @@ List<StationEntry> buildEntries(
   return list;
 }
 
+/// Lugar fuera de la zona actual que coincide con lo que se busca.
+class PlaceSuggestion {
+  const PlaceSuggestion(this.title, this.subtitle, this.scope);
+
+  final String title;
+  final String subtitle;
+  final SearchScope scope;
+}
+
+/// Pueblos o códigos postales que coinciden con [query] pero quedan fuera de
+/// [current], para ofrecer cambiar de zona. Los que están dentro ya aparecen
+/// en la lista normal.
+List<PlaceSuggestion> findPlaces(
+  String query, {
+  required SearchScope? current,
+  required List<Municipality> municipalities,
+  required List<Province> provinces,
+  int limit = 6,
+}) {
+  final q = normalize(query.trim());
+  bool outside(String provinceId, String communityId) => switch (current?.kind) {
+    null => true,
+    ScopeKind.spain => false,
+    ScopeKind.community => current!.id != communityId,
+    ScopeKind.province || ScopeKind.myProvince => current!.id != provinceId,
+  };
+
+  if (RegExp(r'^\d{5}$').hasMatch(q)) {
+    final id = provinceFromPostalCode(q);
+    final province = provinces.where((p) => p.id == id).firstOrNull;
+    if (province == null || !outside(province.id, province.communityId)) return const [];
+    return [
+      PlaceSuggestion('Código postal $q', province.name, SearchScope.province(province.id, province.name)),
+    ];
+  }
+  if (q.length < 3 || RegExp(r'^\d+$').hasMatch(q)) return const [];
+
+  final startsWith = <Municipality>[];
+  final contains = <Municipality>[];
+  for (final m in municipalities) {
+    if (!outside(m.provinceId, m.communityId)) continue;
+    // Nombres bilingües: "Calpe/Calp" debe encontrarse por cualquiera de los dos.
+    final names = normalize(m.name).split('/').map((n) => n.trim());
+    if (names.any((n) => n.startsWith(q))) {
+      startsWith.add(m);
+    } else if (names.any((n) => n.contains(q))) {
+      contains.add(m);
+    }
+  }
+  // "madrid" -> Madrid antes que Madridejos.
+  startsWith.sort((a, b) => a.name.length.compareTo(b.name.length));
+  return [
+    for (final m in [...startsWith, ...contains].take(limit))
+      PlaceSuggestion(m.name, m.provinceName, SearchScope.province(m.provinceId, m.provinceName)),
+  ];
+}
+
 class StationsController extends ChangeNotifier {
   StationsController(this._repo, this._location);
 
@@ -89,6 +146,9 @@ class StationsController extends ChangeNotifier {
   List<Community> communities = const [];
 
   List<StationEntry>? _entries;
+  List<Municipality> _municipalities = const [];
+  bool _municipalitiesRequested = false;
+  List<PlaceSuggestion>? _places;
   StreamSubscription<Position>? _positionSub;
   Timer? _refreshTimer;
   bool _disposed = false;
@@ -286,8 +346,39 @@ class StationsController extends ChangeNotifier {
     if (provinces.isEmpty || communities.isEmpty) await _loadRegions();
   }
 
+  /// Pueblos o códigos postales de otras zonas que coinciden con la búsqueda.
+  List<PlaceSuggestion> get placeSuggestions {
+    if (_query.trim().length < 3) return const [];
+    if (_municipalities.isEmpty) unawaited(_loadMunicipalities());
+    return _places ??= findPlaces(
+      _query,
+      current: _scope,
+      municipalities: _municipalities,
+      provinces: provinces,
+    );
+  }
+
+  /// Cambia a la zona de una sugerencia manteniendo la búsqueda, así se ven
+  /// directamente las gasolineras de ese pueblo o código postal.
+  Future<void> goToPlace(PlaceSuggestion place) => setScope(place.scope);
+
+  Future<void> _loadMunicipalities() async {
+    if (_municipalitiesRequested) return;
+    _municipalitiesRequested = true;
+    try {
+      final list = await _repo.municipalities();
+      if (provinces.isEmpty) await _loadRegions();
+      _municipalities = list;
+      _invalidate();
+    } catch (_) {
+      // Se reintentará en la próxima búsqueda.
+      _municipalitiesRequested = false;
+    }
+  }
+
   void _invalidate() {
     _entries = null;
+    _places = null;
     _notify();
   }
 

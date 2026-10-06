@@ -9,6 +9,9 @@ abstract interface class FuelPriceRepository {
 
   Future<List<Community>> communities();
 
+  /// Todos los municipios de España, para buscar pueblos fuera de la zona.
+  Future<List<Municipality>> municipalities();
+
   Future<PriceSnapshot> stations(SearchScope scope, {bool forceRefresh = false});
 }
 

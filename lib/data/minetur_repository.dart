@@ -23,6 +23,17 @@ class MineturRepository implements FuelPriceRepository {
   final _inFlight = <String, Future<PriceSnapshot>>{};
   Future<List<Province>>? _provinces;
   Future<List<Community>>? _communities;
+  Future<List<Municipality>>? _municipalities;
+
+  @override
+  Future<List<Municipality>> municipalities() => _municipalities ??=
+      // ~1 MB de JSON: se descarga solo la primera vez que se busca algo.
+      _get('$_base/Listados/Municipios/').then((bytes) => compute(parseMunicipalities, bytes)).catchError((
+        Object e,
+      ) {
+        _municipalities = null;
+        throw e;
+      });
 
   @override
   Future<List<Province>> provinces() => _provinces ??= _getJson('$_base/Listados/Provincias/')
@@ -114,6 +125,20 @@ PriceSnapshot parseSnapshot(Uint8List bytes) {
     stations: raw.map(Station.fromApi).whereType<Station>().toList(growable: false),
     publishedAt: _parseDate(json['Fecha'] as String?),
   );
+}
+
+List<Municipality> parseMunicipalities(Uint8List bytes) {
+  final raw = (jsonDecode(utf8.decode(bytes)) as List).cast<Map<String, dynamic>>();
+  return [
+    for (final m in raw)
+      Municipality(
+        id: '${m['IDMunicipio']}',
+        name: '${m['Municipio']}',
+        provinceId: '${m['IDProvincia']}',
+        provinceName: prettyName('${m['Provincia']}'),
+        communityId: '${m['IDCCAA']}',
+      ),
+  ];
 }
 
 /// "05/10/2026 15:19:22" -> DateTime (hora peninsular).

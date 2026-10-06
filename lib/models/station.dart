@@ -7,6 +7,7 @@ class Station {
     required this.brand,
     required this.address,
     required this.municipality,
+    this.locality = '',
     required this.province,
     required this.provinceId,
     required this.communityId,
@@ -15,12 +16,15 @@ class Station {
     required this.latitude,
     required this.longitude,
     required this.prices,
-  }) : searchText = normalize('$brand $address $municipality $postalCode');
+  }) : searchText = normalize('$brand $address $municipality $locality $postalCode');
 
   final String id;
   final String brand;
   final String address;
   final String municipality;
+
+  /// Núcleo de población (pedanía, urbanización…), p. ej. "La Zenia".
+  final String locality;
   final String province;
   final String provinceId;
   final String communityId;
@@ -51,6 +55,7 @@ class Station {
       brand: prettyName('${j['Rótulo'] ?? ''}'),
       address: prettyName('${j['Dirección'] ?? ''}'),
       municipality: prettyName('${j['Municipio'] ?? ''}'),
+      locality: prettyName('${j['Localidad'] ?? ''}'),
       province: prettyName('${j['Provincia'] ?? ''}'),
       provinceId: '${j['IDProvincia'] ?? ''}',
       communityId: '${j['IDCCAA'] ?? ''}',

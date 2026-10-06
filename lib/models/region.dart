@@ -13,6 +13,24 @@ class Community {
   final String name;
 }
 
+class Municipality {
+  const Municipality({
+    required this.id,
+    required this.name,
+    required this.provinceId,
+    required this.provinceName,
+    required this.communityId,
+  });
+
+  final String id;
+
+  /// Puede ser bilingüe, p. ej. "Calpe/Calp".
+  final String name;
+  final String provinceId;
+  final String provinceName;
+  final String communityId;
+}
+
 enum ScopeKind { myProvince, province, community, spain }
 
 /// Zona sobre la que se buscan gasolineras.

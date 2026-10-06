@@ -176,6 +176,9 @@ class _MapView extends StatelessWidget {
 /// resultados) o `null` si hay gasolineras que mostrar.
 Widget? _statusView(BuildContext context, StationsController c) {
   if (c.scope == null) {
+    // Sin zona todavía, pero ya se puede buscar un pueblo o CP directamente.
+    final places = c.placeSuggestions;
+    if (places.isNotEmpty) return ListView(children: [_PlaceSuggestions(places: places)]);
     if (c.locating) {
       return const _Message(icon: Icons.my_location, text: 'Buscando tu ubicación…', busy: true);
     }
@@ -204,6 +207,21 @@ Widget? _statusView(BuildContext context, StationsController c) {
 
   final entries = c.entries;
   if (entries.isEmpty) {
+    final places = c.placeSuggestions;
+    if (places.isNotEmpty) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              'No hay resultados para "${c.query}" en ${c.scope!.label}. ¿Buscabas alguno de estos?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          _PlaceSuggestions(places: places),
+        ],
+      );
+    }
     return _Message(
       icon: Icons.search_off,
       text: c.query.isEmpty
@@ -212,6 +230,32 @@ Widget? _statusView(BuildContext context, StationsController c) {
     );
   }
   return null;
+}
+
+/// Pueblos o códigos postales de otras zonas; al tocarlos se cambia de zona
+/// manteniendo la búsqueda.
+class _PlaceSuggestions extends StatelessWidget {
+  const _PlaceSuggestions({required this.places});
+
+  final List<PlaceSuggestion> places;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.read<StationsController>();
+    return Column(
+      children: [
+        for (final p in places)
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.travel_explore),
+            title: Text(p.title),
+            subtitle: Text('Provincia de ${p.subtitle}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => c.goToPlace(p),
+          ),
+      ],
+    );
+  }
 }
 
 class _StationList extends StatelessWidget {
@@ -236,13 +280,27 @@ class _StationList extends StatelessWidget {
         separatorBuilder: (_, i) => i == 0 ? const SizedBox.shrink() : const Divider(height: 1, indent: 16),
         itemBuilder: (context, i) {
           if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              child: Text(
-                '${entries.length} gasolineras · desde ${formatPrice(minPrice)}'
-                '${snapshot.publishedAt != null ? ' · precios de ${formatPublished(snapshot.publishedAt!)}' : ''}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+            final places = c.placeSuggestions;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (places.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: Text('En otras zonas', style: Theme.of(context).textTheme.labelLarge),
+                  ),
+                  _PlaceSuggestions(places: places),
+                  const Divider(height: 1),
+                ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: Text(
+                    '${entries.length} gasolineras · desde ${formatPrice(minPrice)}'
+                    '${snapshot.publishedAt != null ? ' · precios de ${formatPublished(snapshot.publishedAt!)}' : ''}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
             );
           }
           final e = entries[i - 1];
