@@ -229,6 +229,43 @@ class StationsController extends ChangeNotifier {
           car: _car,
         );
 
+  /// Gasolineras de la zona actual (sin filtrar por combustible ni búsqueda),
+  /// de la más cercana a la más lejana si hay ubicación. Para elegir dónde se
+  /// ha repostado.
+  List<StationEntry> nearbyStations() {
+    final snapshot = _snapshot;
+    if (snapshot == null) return const [];
+    final townId = _scope?.kind == ScopeKind.myTown ? _scope!.townId : null;
+    final pos = _position;
+    final list = <StationEntry>[
+      for (final s in snapshot.stations)
+        if (townId == null || s.municipalityId == townId)
+          StationEntry(
+            s,
+            s.prices.values.isEmpty ? 0 : s.prices.values.first,
+            pos == null
+                ? null
+                : LocationService.distanceKm(pos.latitude, pos.longitude, s.latitude, s.longitude),
+          ),
+    ];
+    if (pos != null) list.sort((a, b) => a.distanceKm!.compareTo(b.distanceKm!));
+    return list;
+  }
+
+  /// Precio medio de [fuel] en la zona actual, para calcular el ahorro de un
+  /// repostaje. `null` si no hay datos.
+  double? zoneAverageFor(FuelType fuel) {
+    final snapshot = _snapshot;
+    if (snapshot == null) return null;
+    final townId = _scope?.kind == ScopeKind.myTown ? _scope!.townId : null;
+    final prices = <double>[
+      for (final s in snapshot.stations)
+        if ((townId == null || s.municipalityId == townId) && s.prices[fuel] != null) s.prices[fuel]!,
+    ];
+    if (prices.isEmpty) return null;
+    return prices.fold<double>(0, (sum, p) => sum + p) / prices.length;
+  }
+
   Future<void> init() async {
     _refreshTimer = Timer.periodic(_autoRefreshEvery, (_) => refresh(silent: true));
     unawaited(_loadRegions());

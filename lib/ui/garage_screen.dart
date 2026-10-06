@@ -260,72 +260,76 @@ class _RefuelTile extends StatelessWidget {
           );
         },
         child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 46,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        '${entry.date.day}',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: scheme.primary,
-                        ),
-                      ),
-                      Text(
-                        formatDay(entry.date).split(' ').last,
-                        style: theme.textTheme.labelSmall?.copyWith(color: scheme.primary),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.stationName ?? 'Repostaje',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        '${formatLiters(entry.liters)} · ${formatPrice(entry.pricePerLiter)}/L'
-                        '${entry.odometerKm != null ? ' · ${entry.odometerKm!.round()} km' : ''}',
-                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatEuros(entry.totalEuros),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => showRefuelForm(context, existing: entry),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    if (entry.saving.abs() >= 0.01)
-                      Text(
-                        entry.saving > 0
-                            ? 'ahorro ${formatEuros(entry.saving)}'
-                            : '${formatEuros(-entry.saving)} más',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: entry.saving > 0 ? AppColors.cheap : AppColors.expensive,
-                          fontWeight: FontWeight.w700,
+                    child: Column(
+                      children: [
+                        Text(
+                          '${entry.date.day}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: scheme.primary,
+                          ),
                         ),
+                        Text(
+                          formatDay(entry.date).split(' ').last,
+                          style: theme.textTheme.labelSmall?.copyWith(color: scheme.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.stationName ?? 'Repostaje',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '${formatLiters(entry.liters)} · ${formatPrice(entry.pricePerLiter)}/L'
+                          '${entry.odometerKm != null ? ' · ${entry.odometerKm!.round()} km' : ''}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatEuros(entry.totalEuros),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                       ),
-                  ],
-                ),
-              ],
+                      if (entry.saving.abs() >= 0.01)
+                        Text(
+                          entry.saving > 0
+                              ? 'ahorro ${formatEuros(entry.saving)}'
+                              : '${formatEuros(-entry.saving)} más',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: entry.saving > 0 ? AppColors.cheap : AppColors.expensive,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

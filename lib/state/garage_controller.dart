@@ -56,6 +56,14 @@ class GarageController extends ChangeNotifier {
     await _saveLog();
   }
 
+  /// Sustituye un repostaje ya anotado (mismo `id`) por su versión editada.
+  Future<void> updateRefuel(RefuelEntry entry) async {
+    _refuels = [for (final e in _refuels) e.id == entry.id ? entry : e]
+      ..sort((a, b) => b.date.compareTo(a.date));
+    notifyListeners();
+    await _saveLog();
+  }
+
   Future<void> removeRefuel(String id) async {
     _refuels = _refuels.where((e) => e.id != id).toList();
     notifyListeners();

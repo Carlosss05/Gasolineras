@@ -123,15 +123,19 @@ class _Header extends StatelessWidget {
                   _HeaderButton(
                     tooltip: 'Favoritas',
                     icon: Icons.star_outline_rounded,
-                    onPressed: () =>
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesScreen())),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(builder: (_) => const FavoritesScreen()),
+                    ),
                   ),
                   const SizedBox(width: 4),
                   _HeaderButton(
                     tooltip: 'Mi coche',
                     icon: Icons.directions_car_outlined,
-                    onPressed: () =>
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const GarageScreen())),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(builder: (_) => const GarageScreen()),
+                    ),
                   ),
                 ],
               ),

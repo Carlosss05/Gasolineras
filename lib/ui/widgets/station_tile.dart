@@ -6,7 +6,6 @@ import '../../models/fuel_type.dart';
 import '../../models/station.dart';
 import '../../state/favorites_controller.dart';
 import '../../state/garage_controller.dart';
-import '../../state/stations_controller.dart';
 import '../format.dart';
 import '../garage_forms.dart';
 import '../theme.dart';
@@ -167,12 +166,6 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
       final car = context.read<GarageController>().car;
       final calcFuel = fuel ?? car?.fuel;
       final calcPrice = calcFuel == null ? null : station.prices[calcFuel];
-      // Media de la zona para ese combustible, para calcular el ahorro al anotar.
-      final controller = context.read<StationsController>();
-      final zonePrices = controller.fuel == calcFuel
-          ? controller.entries.map((e) => e.price).toList()
-          : const [];
-      final zoneAverage = zonePrices.isEmpty ? null : zonePrices.reduce((a, b) => a + b) / zonePrices.length;
 
       return SafeArea(
         child: SingleChildScrollView(
@@ -269,13 +262,7 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
                   child: FilledButton.tonalIcon(
                     icon: const Icon(Icons.receipt_long_outlined),
                     label: const Text('Anotar repostaje'),
-                    onPressed: () => showRefuelForm(
-                      context,
-                      station: station,
-                      fuel: calcFuel,
-                      price: calcPrice,
-                      zoneAverage: zoneAverage,
-                    ),
+                    onPressed: () => showRefuelForm(context, station: station, fuel: calcFuel),
                   ),
                 ),
               ],
