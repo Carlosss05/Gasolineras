@@ -46,12 +46,21 @@ jobs:
 
       - name: Compilar APK
         run: |
-          # Cada compilación tiene un número de versión mayor que la anterior,
-          # así Android acepta instalarla como actualización.
-          flutter build apk --release --build-number=${{ github.run_number }}
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
-          mv build/app/outputs/flutter-apk/app-release.apk "Gasolineras-$VERSION.apk"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          OUT=build/app/outputs/flutter-apk
+
+          # APK principal: solo arm64-v8a (casi todos los móviles), ~1/3 del tamaño.
+          # Flutter le asigna el código de versión 2000 + número de build.
+          flutter build apk --release --split-per-abi --target-platform android-arm64 \
+            --build-number=${{ github.run_number }}
+          mv "$OUT/app-arm64-v8a-release.apk" "Gasolineras-$VERSION.apk"
+
+          # APK universal para móviles antiguos, con el mismo código de versión
+          # para que se pueda pasar de uno a otro y ambos se actualicen encima.
+          flutter build apk --release --build-number=$((2000 + ${{ github.run_number }}))
+          mv "$OUT/app-release.apk" "Gasolineras-$VERSION-universal.apk"
+          ls -lh Gasolineras-*.apk
 
       - name: Publicar en Releases
         uses: softprops/action-gh-release@v2
@@ -61,5 +70,7 @@ jobs:
           files: Gasolineras-*.apk
           make_latest: true
           body: |
-            Descarga el archivo **Gasolineras-${{ env.VERSION }}.apk** desde el móvil Android y ábrelo para instalarlo.
+            Descarga **Gasolineras-${{ env.VERSION }}.apk** desde el móvil Android y ábrelo para instalarlo.
             Si Android lo pide, permite instalar apps de fuentes desconocidas para tu navegador.
+
+            ¿No se instala? Tu móvil es muy antiguo: usa **Gasolineras-${{ env.VERSION }}-universal.apk** (más pesado, funciona en todos).
