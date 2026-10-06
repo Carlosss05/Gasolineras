@@ -7,6 +7,7 @@ import 'services/location_service.dart';
 import 'state/favorites_controller.dart';
 import 'state/stations_controller.dart';
 import 'ui/home_screen.dart';
+import 'ui/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,12 +30,11 @@ class GasolinerasApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF1B8A3A);
     return MaterialApp(
       title: 'Gasolineras baratas',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
-      darkTheme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.dark, useMaterial3: true),
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
       home: const HomeScreen(),
     );
   }

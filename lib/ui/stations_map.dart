@@ -24,6 +24,18 @@ class StationsMap extends StatefulWidget {
 
   static const maxMarkers = 150;
 
+  /// Cuántas etiquetas caben sin amontonarse según el zoom: pocas con la
+  /// provincia entera a la vista, todas al acercarse a un pueblo.
+  static int markersForZoom(double zoom) => zoom < 9
+      ? 25
+      : zoom < 10.5
+      ? 40
+      : zoom < 12
+      ? 70
+      : zoom < 13.5
+      ? 110
+      : maxMarkers;
+
   @override
   State<StationsMap> createState() => _StationsMapState();
 }
@@ -31,6 +43,7 @@ class StationsMap extends StatefulWidget {
 class _StationsMapState extends State<StationsMap> {
   final _controller = MapController();
   LatLngBounds? _visible;
+  double _zoom = 6;
   Timer? _debounce;
 
   static LatLng _point(StationEntry e) => LatLng(e.station.latitude, e.station.longitude);
@@ -48,7 +61,12 @@ class _StationsMapState extends State<StationsMap> {
   void _onCameraChanged(MapCamera camera, bool hasGesture) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 120), () {
-      if (mounted) setState(() => _visible = camera.visibleBounds);
+      if (mounted) {
+        setState(() {
+          _visible = camera.visibleBounds;
+          _zoom = camera.zoom;
+        });
+      }
     });
   }
 
@@ -64,11 +82,12 @@ class _StationsMapState extends State<StationsMap> {
     final theme = Theme.of(context);
     final bounds = _visible;
 
+    final limit = StationsMap.markersForZoom(_zoom);
     final inView = <StationEntry>[];
     var truncated = false;
     for (final e in widget.entries) {
       if (bounds != null && !bounds.contains(_point(e))) continue;
-      if (inView.length == StationsMap.maxMarkers) {
+      if (inView.length == limit) {
         truncated = true;
         break;
       }
@@ -94,7 +113,10 @@ class _StationsMapState extends State<StationsMap> {
               flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
             ),
             onPositionChanged: _onCameraChanged,
-            onMapReady: () => setState(() => _visible = _controller.camera.visibleBounds),
+            onMapReady: () => setState(() {
+              _visible = _controller.camera.visibleBounds;
+              _zoom = _controller.camera.zoom;
+            }),
           ),
           children: [
             TileLayer(
@@ -128,27 +150,41 @@ class _StationsMapState extends State<StationsMap> {
                   'OpenStreetMap contributors',
                   onTap: () => launchUrl(Uri.parse('https://www.openstreetmap.org/copyright')),
                 ),
+                TextSourceAttribution(
+                  'CARTO',
+                  onTap: () => launchUrl(Uri.parse('https://carto.com/attributions')),
+                ),
               ],
             ),
           ],
         ),
         if (truncated)
           Positioned(
-            top: 8,
-            left: 0,
-            right: 0,
+            top: 12,
+            left: 16,
+            right: 16,
             child: Center(
               child: Material(
-                color: theme.colorScheme.surface.withValues(alpha: 0.92),
-                elevation: 2,
-                borderRadius: BorderRadius.circular(16),
+                color: theme.colorScheme.surface.withValues(alpha: 0.95),
+                elevation: 3,
+                shadowColor: Colors.black26,
+                shape: const StadiumBorder(),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Text(
-                    widget.sort == SortMode.price
-                        ? 'Las ${StationsMap.maxMarkers} más baratas de la zona visible · acerca para ver más'
-                        : 'Las ${StationsMap.maxMarkers} más cercanas · acerca para ver más',
-                    style: theme.textTheme.bodySmall,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.zoom_in_rounded, size: 16, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          widget.sort == SortMode.price
+                              ? 'Las $limit más baratas · acerca para ver más'
+                              : 'Las $limit más cercanas · acerca para ver más',
+                          style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

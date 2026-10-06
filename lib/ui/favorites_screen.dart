@@ -7,6 +7,7 @@ import '../models/station.dart';
 import '../state/favorites_controller.dart';
 import '../state/stations_controller.dart';
 import 'home_screen.dart';
+import 'theme.dart';
 import 'widgets/station_tile.dart';
 
 /// Gasolineras guardadas, con su precio actual aunque estén en otra provincia.
@@ -58,12 +59,35 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           const FiltersBar(),
           Expanded(
             child: favorites.isEmpty
-                ? const Center(
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text(
-                        'Aún no tienes favoritas.\nPulsa la estrella de una gasolinera para guardarla.',
-                        textAlign: TextAlign.center,
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 96,
+                            height: 96,
+                            decoration: const BoxDecoration(color: Color(0x33F5A524), shape: BoxShape.circle),
+                            child: const Icon(Icons.star_rounded, size: 48, color: AppColors.amber),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Aún no tienes favoritas',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Pulsa la estrella de tus gasolineras habituales y aquí verás '
+                            'sus precios de hoy de un vistazo.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -100,6 +124,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       return RefreshIndicator(
                         onRefresh: _reload,
                         child: ListView(
+                          padding: const EdgeInsets.only(top: 4, bottom: 24),
                           children: [
                             for (final e in withFuel)
                               StationTile(
