@@ -1,38 +1,118 @@
-# Gasolineras baratas
+<div align="center">
 
-App móvil (Android e iOS) hecha con **Flutter** para encontrar las gasolineras más baratas o más cercanas con precios oficiales actualizados.
+<img src="assets/icon/icon.png" alt="Gasolineras" width="112" />
 
-## Funcionalidades
+# Gasolineras
 
-- **Mi provincia automática**: detecta tu provincia por GPS (por el código postal) y cambia sola si cruzas a otra.
-- **Precios al momento**: datos del Ministerio para la Transición Ecológica, que se publican cada ~30 min. La app los recarga cada 10 min y con *pull to refresh*.
-- **Distancias en movimiento**: la lista recalcula distancias y reordena cada 100 m que te desplazas.
-- **Ordenar** por precio (de más barato a más caro) o por cercanía.
-- **Otras zonas**: cualquier provincia, comunidad autónoma o toda España.
-- **Combustibles**: Gasolina 95, 95 E10, 98, Diésel, Diésel Premium, GLP y GNC.
-- **Buscador** por pueblo, marca o código postal.
-- **Favoritas** guardadas en el móvil, con su precio actual aunque estén en otra provincia.
-- **Cómo llegar**: abre la ruta en Google Maps.
+**Llena el depósito por menos.**
+Encuentra la gasolinera más barata de tu pueblo con precios oficiales actualizados.
 
-## Estructura
+[![Versión](https://img.shields.io/github/v/release/Carlosss05/Gasolineras?label=versi%C3%B3n&color=0B8F5A)](https://github.com/Carlosss05/Gasolineras/releases/latest)
+[![Web](https://github.com/Carlosss05/Gasolineras/actions/workflows/pages.yml/badge.svg)](https://github.com/Carlosss05/Gasolineras/actions/workflows/pages.yml)
+[![Android](https://github.com/Carlosss05/Gasolineras/actions/workflows/android.yml/badge.svg)](https://github.com/Carlosss05/Gasolineras/actions/workflows/android.yml)
+![Flutter](https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter&logoColor=white)
+![Plataformas](https://img.shields.io/badge/plataformas-Android%20%C2%B7%20iOS%20%C2%B7%20Web-0F766E)
+
+### [🌐 Abrir la app web](https://carlosss05.github.io/Gasolineras/) &nbsp;·&nbsp; [📱 Descargar para Android](https://github.com/Carlosss05/Gasolineras/releases/latest)
+
+</div>
+
+<p align="center">
+  <img src="docs/screenshots/inicio.jpg" alt="Pantalla principal con la gasolinera más barata y el ahorro al llenar el depósito" width="280" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/ficha.jpg" alt="Ficha de una gasolinera con todos sus precios" width="280" />
+</p>
+
+---
+
+## ✨ Qué hace
+
+| | |
+|---|---|
+| 📍 **Tu pueblo, automáticamente** | Detecta dónde estás y muestra las gasolineras de tu municipio (Calpe, Elche…). Cambia sola al moverte. |
+| 🏆 **La más barata, destacada** | Te dice cuánto ahorras llenando 50 L frente a la media de la zona, con un botón para ir directamente. |
+| ⏱️ **Precios al momento** | Datos oficiales del Ministerio para la Transición Ecológica, que se actualizan cada ~30 min. La app los refresca sola. |
+| ↕️ **Ordena como quieras** | De más barata a más cara, o por cercanía. Las distancias se recalculan mientras te desplazas. |
+| 🗺️ **Mapa** | Etiquetas con el precio, de verde (barata) a rojo (cara). Se ven más a medida que te acercas. |
+| 🔎 **Busca en toda España** | Pueblo, marca o código postal. Si está en otra provincia, te sugiere ir allí («Calpe/Calp · Alicante»). |
+| ⭐ **Favoritas** | Guarda tus gasolineras habituales y consulta su precio de hoy aunque estén en otra provincia. |
+| ⛽ **7 combustibles** | Gasolina 95, 95 E10, 98, Diésel, Diésel Premium, GLP y GNC. |
+| 🌙 **Modo claro y oscuro** | Según el ajuste de tu móvil. |
+
+## 📲 Instalación
+
+**iPhone (y cualquier móvil):** abre **[carlosss05.github.io/Gasolineras](https://carlosss05.github.io/Gasolineras/)** en Safari, pulsa *Compartir → Añadir a pantalla de inicio* y se abrirá como una app a pantalla completa.
+
+**Android:** descarga el `.apk` de la **[última versión](https://github.com/Carlosss05/Gasolineras/releases/latest)** y ábrelo. La primera vez Android te pedirá permitir instalar apps desde el navegador. Las actualizaciones se instalan encima sin perder tus favoritas.
+
+## 🧭 Cómo funciona
+
+```mermaid
+flowchart LR
+    GPS[📍 Ubicación] --> Geo[Geocodificador del móvil<br/>u OpenStreetMap]
+    Geo -->|provincia + municipio| App[App Flutter]
+    API[API de precios<br/>del Ministerio] -->|gasolineras de la provincia| App
+    App --> Lista[Lista ordenada]
+    App --> Mapa[Mapa]
+    App --> Fav[Favoritas<br/>en el dispositivo]
+```
+
+1. La app obtiene tu posición y averigua la **provincia y el municipio**, con el geocodificador del sistema o con OpenStreetMap (Nominatim) en la web.
+2. Descarga las gasolineras de tu provincia de la **API pública del Ministerio** (unos 200 KB) y filtra las de tu pueblo.
+3. Ordena por precio o distancia, y recalcula las distancias cada 100 m que te mueves.
+4. Recuerda la última zona para que, al volver a abrirla, los precios salgan al instante.
+
+## 🏗️ Arquitectura
 
 ```
 lib/
-  data/       FuelPriceRepository (interfaz) + MineturRepository (API pública)
-  models/     Station, FuelType, Province/Community/SearchScope
-  services/   LocationService (GPS + detección de provincia)
-  state/      StationsController, FavoritesController (provider)
-  ui/         Pantallas y widgets
+├── data/       FuelPriceRepository (interfaz) · MineturRepository (API del Ministerio, con caché)
+├── models/     Station · FuelType · Province, Community, Municipality, SearchScope
+├── services/   LocationService (GPS, provincia y municipio)
+├── state/      StationsController · FavoritesController (provider)
+├── ui/         Pantallas, mapa, tema (theme.dart) e insignias de marca
+└── utils/      Normalización de textos (búsquedas sin tildes)
 ```
 
-La interfaz de usuario solo depende de `FuelPriceRepository`. Para escalar, por ejemplo con un backend propio que cachee los precios, guarde histórico o envíe alertas, basta con añadir otra implementación de esa interfaz.
+- **Preparada para escalar.** La interfaz solo depende de `FuelPriceRepository`. Para usar un backend propio (caché compartida, histórico de precios, alertas…) basta con añadir otra implementación.
+- **Rápida con datos grandes.** Toda España son unas 12.000 gasolineras (12 MB): se procesan fuera del hilo de la interfaz y el mapa solo dibuja las etiquetas visibles.
 
-## Ejecutar
+### Tecnologías
+
+[Flutter](https://flutter.dev) · [provider](https://pub.dev/packages/provider) · [flutter_map](https://pub.dev/packages/flutter_map) · [geolocator](https://pub.dev/packages/geolocator) · [geocoding](https://pub.dev/packages/geocoding) · [shared_preferences](https://pub.dev/packages/shared_preferences) · [google_fonts](https://pub.dev/packages/google_fonts) (Plus Jakarta Sans)
+
+## 🛠️ Desarrollo
+
+Requisitos: [Flutter](https://docs.flutter.dev/get-started/install) 3.41 o superior.
 
 ```bash
 flutter pub get
-flutter run          # con un móvil conectado o un emulador abierto
-flutter test
+flutter run              # en un móvil conectado o un emulador
+flutter run -d chrome    # versión web
+flutter test             # tests unitarios
 ```
 
-Fuente de datos: [API REST de precios de carburantes](https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/) (pública y sin clave).
+### Publicar una versión
+
+| Qué | Cómo |
+|---|---|
+| **Web** | Automático en cada push a `main` ([workflow](.github/workflows/pages.yml)). |
+| **Android** | Sube `version` en `pubspec.yaml` y publica una etiqueta: `git tag v1.2.0 && git push origin v1.2.0`. El [workflow](.github/workflows/android.yml) compila el APK firmado y crea la *release*. |
+
+El APK se firma con una clave guardada en los *secrets* del repositorio (`ANDROID_KEYSTORE_BASE64` y `ANDROID_KEYSTORE_PASSWORD`). La clave nunca se sube al código.
+
+Para regenerar los iconos tras cambiar `assets/icon/`:
+
+```bash
+dart run flutter_launcher_icons
+```
+
+## 📄 Datos y créditos
+
+- **Precios:** [Geoportal de Gasolineras](https://geoportalgasolineras.es/) del Ministerio para la Transición Ecológica y el Reto Demográfico ([API REST](https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/)).
+- **Mapas y geocodificación:** © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
+- Las insignias de marca son propias, con los colores de cada marca. No se usan logotipos oficiales.
+
+<div align="center">
+<sub>Hecho con 💚 por <a href="https://github.com/Carlosss05">Carlosss05</a></sub>
+</div>
