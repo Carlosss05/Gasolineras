@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/fuel_type.dart';
 import '../../models/station.dart';
 import '../../state/favorites_controller.dart';
+import '../../state/garage_controller.dart';
 import '../format.dart';
+import '../garage_forms.dart';
 import '../theme.dart';
 import 'brand_badge.dart';
 
@@ -161,6 +163,9 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
       final scheme = theme.colorScheme;
       final isFavorite = context.select<FavoritesController, bool>((f) => f.isFavorite(station.id));
       final prices = station.prices.entries.toList()..sort((a, b) => a.key.index.compareTo(b.key.index));
+      final car = context.read<GarageController>().car;
+      final calcFuel = fuel ?? car?.fuel;
+      final calcPrice = calcFuel == null ? null : station.prices[calcFuel];
 
       return SafeArea(
         child: SingleChildScrollView(
@@ -223,6 +228,10 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
                       _PriceCell(fuel: e.key, price: e.value, highlighted: e.key == fuel),
                   ],
                 ),
+              if (calcFuel != null && calcPrice != null) ...[
+                const SizedBox(height: 18),
+                FuelCalculator(fuel: calcFuel, price: calcPrice, tankLiters: car?.tankLiters),
+              ],
               const SizedBox(height: 18),
               Row(
                 children: [
@@ -246,12 +255,124 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
                   ),
                 ],
               ),
+              if (calcFuel != null && calcPrice != null) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: const Text('Anotar repostaje'),
+                    onPressed: () => showRefuelForm(context, station: station, fuel: calcFuel),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       );
     },
   );
+}
+
+/// Calculadora rápida: euros -> litros, litros -> euros y coste de llenar el
+/// depósito con el precio de esta gasolinera.
+class FuelCalculator extends StatefulWidget {
+  const FuelCalculator({super.key, required this.fuel, required this.price, this.tankLiters});
+
+  final FuelType fuel;
+  final double price;
+  final double? tankLiters;
+
+  @override
+  State<FuelCalculator> createState() => _FuelCalculatorState();
+}
+
+class _FuelCalculatorState extends State<FuelCalculator> {
+  bool _byEuros = true;
+  final _input = TextEditingController();
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final value = parseDecimal(_input.text);
+    final result = value == null || value <= 0
+        ? null
+        : _byEuros
+        ? 'Te dan ${formatLiters(value / widget.price)}'
+        : 'Te cuesta ${formatEuros(value * widget.price)}';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calculate_outlined, size: 18, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Calculadora · ${widget.fuel.label}',
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: const [
+                  ButtonSegment(value: true, label: Text('€')),
+                  ButtonSegment(value: false, label: Text('L')),
+                ],
+                selected: {_byEuros},
+                onSelectionChanged: (s) => setState(() => _byEuros = s.first),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: _byEuros ? '¿Cuántos euros?' : '¿Cuántos litros?',
+                    suffixText: _byEuros ? '€' : 'L',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (result != null) ...[
+            const SizedBox(height: 8),
+            Text(result, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          ],
+          if (widget.tankLiters != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Llenar tu depósito (${formatLiters(widget.tankLiters!)}): '
+              '${formatEuros(widget.tankLiters! * widget.price)}',
+              style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _PriceCell extends StatelessWidget {

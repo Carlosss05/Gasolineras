@@ -2,20 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../logic/savings.dart';
+import '../models/car.dart';
 import '../models/fuel_type.dart';
 import '../models/region.dart';
 import '../models/station.dart';
+import '../state/garage_controller.dart';
 import '../state/stations_controller.dart';
 import 'favorites_screen.dart';
 import 'format.dart';
+import 'garage_forms.dart';
+import 'garage_screen.dart';
 import 'scope_picker.dart';
 import 'stations_map.dart';
 import 'theme.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/station_tile.dart';
 
-/// Litros de referencia para calcular cuánto se ahorra al llenar el depósito.
-const _tankLiters = 50;
+/// Litros de referencia si el usuario no ha configurado su coche.
+const _defaultTankLiters = 50.0;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -102,6 +107,8 @@ class _Header extends StatelessWidget {
                         ),
                         Text(
                           'Llena el depósito por menos',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
                         ),
                       ],
@@ -112,12 +119,23 @@ class _Header extends StatelessWidget {
                     icon: showMap ? Icons.view_agenda_outlined : Icons.map_outlined,
                     onPressed: onToggleMap,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   _HeaderButton(
                     tooltip: 'Favoritas',
                     icon: Icons.star_outline_rounded,
-                    onPressed: () =>
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesScreen())),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(builder: (_) => const FavoritesScreen()),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  _HeaderButton(
+                    tooltip: 'Mi coche',
+                    icon: Icons.directions_car_outlined,
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(builder: (_) => const GarageScreen()),
+                    ),
                   ),
                 ],
               ),
@@ -225,7 +243,13 @@ class _HeaderButton extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.16)),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white.withValues(alpha: 0.16),
+        fixedSize: const Size(40, 40),
+        minimumSize: const Size(40, 40),
+        padding: EdgeInsets.zero,
+      ),
+      iconSize: 21,
       icon: Icon(icon, color: Colors.white),
     );
   }
@@ -306,30 +330,48 @@ class FiltersBar extends StatelessWidget {
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
+            // Con el coche configurado aparece "Rentables" (coste real con el
+            // viaje); entonces las etiquetas se acortan para que quepan.
             child: SegmentedButton<SortMode>(
               showSelectedIcon: false,
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: SortMode.price,
-                  icon: Icon(Icons.savings_outlined),
-                  label: Text('Más baratas'),
+                  icon: const Icon(Icons.savings_outlined),
+                  label: Text(c.car == null ? 'Más baratas' : 'Baratas'),
                 ),
                 ButtonSegment(
                   value: SortMode.distance,
-                  icon: Icon(Icons.near_me),
-                  label: Text('Más cercanas'),
+                  icon: const Icon(Icons.near_me),
+                  label: Text(c.car == null ? 'Más cercanas' : 'Cercanas'),
                 ),
+                if (c.car != null)
+                  const ButtonSegment(
+                    value: SortMode.value,
+                    icon: Icon(Icons.auto_graph_rounded),
+                    label: Text('Rentables'),
+                  ),
               ],
               selected: {c.sort},
               onSelectionChanged: (s) => c.setSort(s.first),
             ),
           ),
-          if (c.sort == SortMode.distance && c.position == null)
+          if (c.sort != SortMode.price && c.position == null)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: Text(
-                'Activa la ubicación para ordenar por cercanía.',
+                c.sort == SortMode.distance
+                    ? 'Activa la ubicación para ordenar por cercanía.'
+                    : 'Activa la ubicación para calcular el coste del viaje.',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+              ),
+            ),
+          if (c.sort == SortMode.value && c.position != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: Text(
+                'Ordenadas por lo que te cuesta llenar el depósito, incluido el viaje de ida y vuelta.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
         ],
@@ -539,6 +581,7 @@ class _StationList extends StatelessWidget {
     final average = prices.reduce((a, b) => a + b) / prices.length;
     final cheapest = entries.reduce((a, b) => b.price < a.price ? b : a);
     final places = c.placeSuggestions;
+    final garage = context.watch<GarageController>();
 
     final header = <Widget>[
       if (places.isNotEmpty) ...[
@@ -551,10 +594,18 @@ class _StationList extends StatelessWidget {
         ),
         _PlaceSuggestions(places: places),
       ],
+      if (garage.loaded && garage.car == null)
+        const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12), child: _CarPrompt()),
       if (entries.length > 1)
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-          child: _BestDealCard(entry: cheapest, average: average, fuel: c.fuel),
+          child: _BestDealCard(
+            entry: cheapest,
+            average: average,
+            fuel: c.fuel,
+            car: garage.car,
+            worthIt: garage.car == null ? null : compareCheapestWithNearest(entries, garage.car!),
+          ),
         ),
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
@@ -600,17 +651,27 @@ class _StationList extends StatelessWidget {
 /// Tarjeta destacada con la gasolinera más barata y lo que se ahorra al
 /// llenar el depósito frente a la media de la zona.
 class _BestDealCard extends StatelessWidget {
-  const _BestDealCard({required this.entry, required this.average, required this.fuel});
+  const _BestDealCard({
+    required this.entry,
+    required this.average,
+    required this.fuel,
+    required this.car,
+    required this.worthIt,
+  });
 
   final StationEntry entry;
   final double average;
   final FuelType fuel;
+  final CarProfile? car;
+  final WorthIt? worthIt;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final Station s = entry.station;
-    final saving = (average - entry.price) * _tankLiters;
+    final tankLiters = car?.tankLiters ?? _defaultTankLiters;
+    final saving = (average - entry.price) * tankLiters;
+    final litersText = formatLiters(tankLiters).replaceAll(',0 L', ' L');
 
     return Material(
       color: AppColors.ink,
@@ -737,7 +798,7 @@ class _BestDealCard extends StatelessWidget {
                             saving >= 0.5
                                 ? TextSpan(
                                     children: [
-                                      const TextSpan(text: 'Llenando $_tankLiters L aquí ahorras '),
+                                      TextSpan(text: 'Llenando $litersText aquí ahorras '),
                                       TextSpan(
                                         text: formatEuros(saving),
                                         style: const TextStyle(
@@ -755,6 +816,7 @@ class _BestDealCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (worthIt != null) ...[const SizedBox(height: 8), _WorthItBox(result: worthIt!)],
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -772,6 +834,109 @@ class _BestDealCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "¿Merece la pena ir?": ahorro en combustible frente a la gasolinera más
+/// cercana, menos lo que cuesta de más el viaje.
+class _WorthItBox extends StatelessWidget {
+  const _WorthItBox({required this.result});
+
+  final WorthIt result;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ok = result.worthIt;
+    final accent = ok ? const Color(0xFF3DD68C) : const Color(0xFFFF8A80);
+    final nearest = result.nearest;
+    final style = theme.textTheme.bodySmall?.copyWith(color: Colors.white70);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                ok ? Icons.thumb_up_alt_rounded : Icons.do_not_disturb_on_outlined,
+                size: 18,
+                color: accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  ok
+                      ? '¿Merece la pena ir? Sí: ahorras ${formatEuros(result.netSaving)}'
+                      : '¿Merece la pena ir? No, mejor la más cercana',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Frente a ${nearest.station.brand.isEmpty ? 'la más cercana' : nearest.station.brand} '
+            '(a ${formatDistance(nearest.distanceKm!)}, ${formatPrice(nearest.price)}/L): '
+            '${formatEuros(result.fuelSaving)} menos en combustible, '
+            '${formatEuros(result.extraTripCost)} más de viaje (ida y vuelta).',
+            style: style,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Invitación a configurar el coche (desaparece al hacerlo).
+class _CarPrompt extends StatelessWidget {
+  const _CarPrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Card(
+      color: scheme.primaryContainer,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => showCarForm(context),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Icon(Icons.directions_car_filled_rounded, color: scheme.primary, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Configura tu coche',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      'Y te diremos si compensa ir a la más barata, contando el viaje.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.primary),
+            ],
+          ),
         ),
       ),
     );

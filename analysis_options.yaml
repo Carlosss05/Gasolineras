@@ -26,3 +26,10 @@ linter:
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
+
+analyzer:
+  # Avisa de tipos que Dart no puede deducir (listas vacías sin tipo, etc.),
+  # que en modo desarrollo provocan errores en tiempo de ejecución.
+  language:
+    strict-inference: true
+    strict-raw-types: true

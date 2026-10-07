@@ -40,10 +40,12 @@ dependencies:
   geocoding: ^5.0.0
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.3
-  intl: ^0.20.3
+  intl: ^0.20.2
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   google_fonts: ^8.2.1
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
