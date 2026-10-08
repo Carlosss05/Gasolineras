@@ -92,6 +92,18 @@ flutter run -d chrome    # versión web
 flutter test             # tests unitarios
 ```
 
+### Calidad: rendimiento y seguridad
+
+```bash
+flutter test test/performance_test.dart --reporter expanded   # tiempos con datos de toda España
+flutter test test/security_test.dart                          # 22 pruebas de seguridad
+dart run tool/osv_audit.dart                                  # vulnerabilidades conocidas en dependencias
+```
+
+- **Rendimiento:** procesar las 12.000 gasolineras de España tarda ~130 ms en el navegador; ordenar o buscar, menos de 6 ms por tecla. Las medidas tienen límites y fallan si algo se vuelve lento ([tool/benchmarks.dart](tool/benchmarks.dart)).
+- **Seguridad:** los datos de la API y lo guardado en el móvil se validan (precios, coordenadas, tamaños); la web tiene una *Content Security Policy* que solo permite conectar con los servicios que usa la app; todo va por HTTPS; las claves nunca están en el repositorio.
+- El workflow [Seguridad y rendimiento](.github/workflows/security.yml) lo comprueba en cada push y cada lunes.
+
 ### Publicar una versión
 
 | Qué | Cómo |
@@ -112,6 +124,7 @@ dart run flutter_launcher_icons
 - **Precios:** [Geoportal de Gasolineras](https://geoportalgasolineras.es/) del Ministerio para la Transición Ecológica y el Reto Demográfico ([API REST](https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/)).
 - **Mapas y geocodificación:** © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
 - Las insignias de marca son propias, con los colores de cada marca. No se usan logotipos oficiales.
+- **Tipografía:** [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans), licencia SIL Open Font License ([assets/google_fonts/OFL.txt](assets/google_fonts/OFL.txt)).
 
 <div align="center">
 <sub>Hecho con 💚 por <a href="https://github.com/Carlosss05">Carlosss05</a></sub>

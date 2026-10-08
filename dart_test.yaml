@@ -1,0 +1,5 @@
+# Etiquetas de tests. Para excluir las medidas de rendimiento en una pasada
+# rápida: flutter test --exclude-tags performance
+tags:
+  performance:
+    description: Medidas de rendimiento con datos del tamaño de toda España.

@@ -288,7 +288,7 @@ class AppLogo extends StatelessWidget {
                 style: TextStyle(
                   color: AppColors.ink,
                   fontSize: size * 0.2,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   height: 1,
                 ),
               ),
@@ -718,7 +718,7 @@ class _BestDealCard extends StatelessWidget {
                               'LA MÁS BARATA',
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: AppColors.ink,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                                 letterSpacing: 0.6,
                               ),
                             ),
@@ -769,7 +769,7 @@ class _BestDealCard extends StatelessWidget {
                             formatPriceNumber(entry.price),
                             style: theme.textTheme.headlineMedium?.copyWith(
                               color: AppColors.amber,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                               letterSpacing: -1,
                               fontFeatures: const [FontFeature.tabularFigures()],
                             ),

@@ -33,7 +33,7 @@ class BrandBadge extends StatelessWidget {
                   style.label!,
                   style: TextStyle(
                     color: style.foreground,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     fontSize: size * 0.42,
                     letterSpacing: -0.5,
                     height: 1,

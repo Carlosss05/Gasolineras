@@ -65,6 +65,37 @@ class SearchScope {
     ScopeKind.myTown || ScopeKind.myProvince || ScopeKind.province => 'P$id',
   };
 
+  Map<String, String> toJson() => {'kind': kind.name, 'id': id, 'name': name, 'townId': ?townId};
+
+  /// Lee una zona guardada en el dispositivo. Devuelve `null` si los datos
+  /// están dañados o manipulados (tipo desconocido, códigos no numéricos…).
+  static SearchScope? fromJson(Map<String, dynamic> j) {
+    try {
+      final id = j['id'] as String;
+      final name = (j['name'] as String).trim();
+      final townId = j['townId'];
+      final kind = ScopeKind.values.byName(j['kind'] as String);
+      final numeric = RegExp(r'^\d{1,5}$');
+      if (name.isEmpty || name.length > 100) return null;
+      if (kind != ScopeKind.spain && !numeric.hasMatch(id)) return null;
+      return switch (kind) {
+        ScopeKind.myTown when townId is String && numeric.hasMatch(townId) => SearchScope.myTown(
+          id,
+          townId,
+          name,
+        ),
+        // Formato antiguo sin municipio: se queda en la provincia.
+        ScopeKind.myTown => SearchScope.myProvince(id, name),
+        ScopeKind.myProvince => SearchScope.myProvince(id, name),
+        ScopeKind.province => SearchScope.province(id, name),
+        ScopeKind.community => SearchScope.community(id, name),
+        ScopeKind.spain => const SearchScope.spain(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   String get label => switch (kind) {
     ScopeKind.myTown => 'Mi pueblo · $name',
     ScopeKind.myProvince => 'Mi provincia · $name',

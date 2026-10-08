@@ -41,31 +41,41 @@ class Station {
   /// Texto normalizado sobre el que se aplica el buscador.
   final String searchText;
 
+  /// Precio máximo creíble por litro; por encima se descarta como dato erróneo.
+  static const maxPrice = 10.0;
+
+  /// Longitud máxima de los textos que llegan de la API.
+  static const maxTextLength = 200;
+
   /// Construye una estación a partir de un elemento de `ListaEESSPrecio`.
-  /// Devuelve `null` si no tiene coordenadas válidas.
+  /// Devuelve `null` si no tiene identificador o coordenadas válidas. Los
+  /// datos se tratan como no fiables: precios fuera de rango se ignoran y
+  /// los textos se recortan.
   static Station? fromApi(Map<String, dynamic> j) {
+    final id = _text(j['IDEESS']);
     final lat = _number(j['Latitud']);
     final lng = _number(j['Longitud (WGS84)']);
-    if (lat == null || lng == null) return null;
+    if (id.isEmpty || lat == null || lng == null) return null;
+    if (lat.abs() > 90 || lng.abs() > 180) return null;
 
     final prices = <FuelType, double>{};
     for (final fuel in FuelType.values) {
       final p = _number(j[fuel.apiKey]);
-      if (p != null && p > 0) prices[fuel] = p;
+      if (p != null && p > 0 && p < maxPrice) prices[fuel] = p;
     }
 
     return Station(
-      id: '${j['IDEESS']}',
-      brand: prettyName('${j['Rótulo'] ?? ''}'),
-      address: prettyName('${j['Dirección'] ?? ''}'),
-      municipality: prettyName('${j['Municipio'] ?? ''}'),
-      municipalityId: '${j['IDMunicipio'] ?? ''}',
-      locality: prettyName('${j['Localidad'] ?? ''}'),
-      province: prettyName('${j['Provincia'] ?? ''}'),
-      provinceId: '${j['IDProvincia'] ?? ''}',
-      communityId: '${j['IDCCAA'] ?? ''}',
-      postalCode: '${j['C.P.'] ?? ''}',
-      schedule: '${j['Horario'] ?? ''}',
+      id: id,
+      brand: prettyName(_text(j['Rótulo'])),
+      address: prettyName(_text(j['Dirección'])),
+      municipality: prettyName(_text(j['Municipio'])),
+      municipalityId: _text(j['IDMunicipio']),
+      locality: prettyName(_text(j['Localidad'])),
+      province: prettyName(_text(j['Provincia'])),
+      provinceId: _text(j['IDProvincia']),
+      communityId: _text(j['IDCCAA']),
+      postalCode: _text(j['C.P.']),
+      schedule: _text(j['Horario']),
       latitude: lat,
       longitude: lng,
       prices: prices,
@@ -74,8 +84,15 @@ class Station {
 
   /// La API usa coma decimal ("1,949") y cadenas vacías para "sin dato".
   static double? _number(Object? v) {
-    if (v is! String || v.isEmpty) return null;
-    return double.tryParse(v.replaceAll(',', '.'));
+    if (v is! String || v.isEmpty || v.length > 20) return null;
+    final n = double.tryParse(v.replaceAll(',', '.'));
+    return n != null && n.isFinite ? n : null;
+  }
+
+  static String _text(Object? v) {
+    if (v is! String) return v is num ? '$v' : '';
+    final t = v.trim();
+    return t.length > maxTextLength ? t.substring(0, maxTextLength) : t;
   }
 }
 

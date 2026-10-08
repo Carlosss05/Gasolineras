@@ -146,10 +146,15 @@ class InfoPill extends StatelessWidget {
   }
 }
 
-Future<void> openDirections(Station station) => launchUrl(
-  Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}'),
-  mode: LaunchMode.externalApplication,
-);
+/// Enlace de ruta en Google Maps. Solo lleva las coordenadas (números), nunca
+/// textos de la API, para que un nombre manipulado no pueda alterar la URL.
+Uri directionsUri(Station station) => Uri.https('www.google.com', '/maps/dir/', {
+  'api': '1',
+  'destination': '${station.latitude},${station.longitude}',
+});
+
+Future<void> openDirections(Station station) =>
+    launchUrl(directionsUri(station), mode: LaunchMode.externalApplication);
 
 /// Ficha de la gasolinera: todos sus precios (el combustible elegido,
 /// destacado), horario, distancia y acciones.

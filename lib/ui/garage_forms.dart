@@ -55,11 +55,7 @@ class _CarFormState extends State<_CarForm> {
 
   double? get _tankValue => parseDecimal(_tank.text);
   double? get _consumptionValue => parseDecimal(_consumption.text);
-  bool get _valid =>
-      (_tankValue ?? 0) >= 10 &&
-      (_tankValue ?? 0) <= 200 &&
-      (_consumptionValue ?? 0) >= 2 &&
-      (_consumptionValue ?? 0) <= 30;
+  bool get _valid => CarProfile.isValid(tankLiters: _tankValue ?? 0, consumption: _consumptionValue ?? 0);
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +258,11 @@ class _RefuelFormState extends State<_RefuelForm> {
     }
   }
 
-  bool get _valid => (parseDecimal(_liters.text) ?? 0) > 0 && (parseDecimal(_total.text) ?? 0) > 0;
+  bool get _valid => RefuelEntry.isValid(
+    liters: parseDecimal(_liters.text) ?? 0,
+    totalEuros: parseDecimal(_total.text) ?? 0,
+    odometerKm: parseDecimal(_km.text),
+  );
 
   Future<void> _pickStation() async {
     final picked = await showModalBottomSheet<Station>(
@@ -454,6 +454,7 @@ class _RefuelFormState extends State<_RefuelForm> {
             const SizedBox(height: 12),
             TextField(
               controller: _km,
+              onChanged: (_) => setState(() {}),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: deco(

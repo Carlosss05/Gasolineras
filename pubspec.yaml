@@ -31,9 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   provider: ^6.1.5+1
   http: ^1.6.0
   geolocator: ^14.1.1
@@ -69,6 +66,11 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Tipografía Plus Jakarta Sans incluida en la app (licencia SIL OFL, ver
+  # OFL.txt): no se descarga de Google al arrancar y funciona sin conexión.
+  assets:
+    - assets/google_fonts/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

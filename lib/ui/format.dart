@@ -25,8 +25,14 @@ String formatDay(DateTime d) => _day.format(d);
 
 String formatMonth(DateTime d) => _monthYear.format(d);
 
-/// Número escrito por el usuario, con coma o punto decimal.
-double? parseDecimal(String text) => double.tryParse(text.trim().replaceAll(',', '.'));
+/// Número escrito por el usuario, con coma o punto decimal. `null` si no es
+/// un número finito (p. ej. una cifra de cientos de dígitos sería "infinito").
+double? parseDecimal(String text) {
+  final t = text.trim();
+  if (t.isEmpty || t.length > 15) return null;
+  final n = double.tryParse(t.replaceAll(',', '.'));
+  return n != null && n.isFinite ? n : null;
+}
 
 String formatDistance(double km) => km < 1 ? '${(km * 1000).round()} m' : '${_km.format(km)} km';
 

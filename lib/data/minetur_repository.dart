@@ -93,15 +93,30 @@ class MineturRepository implements FuelPriceRepository {
   Future<PriceSnapshot> _fetchStations(SearchScope scope) async {
     final filter = switch (scope.kind) {
       ScopeKind.spain => '',
-      ScopeKind.community => 'FiltroCCAA/${scope.id}',
-      ScopeKind.myTown || ScopeKind.myProvince || ScopeKind.province => 'FiltroProvincia/${scope.id}',
+      ScopeKind.community => 'FiltroCCAA/${Uri.encodeComponent(scope.id)}',
+      ScopeKind.myTown ||
+      ScopeKind.myProvince ||
+      ScopeKind.province => 'FiltroProvincia/${Uri.encodeComponent(scope.id)}',
     };
     final bytes = await _get('$_base/EstacionesTerrestres/$filter');
     // Toda España son ~12 MB de JSON: se procesa fuera del hilo de la UI.
-    return compute(parseSnapshot, bytes);
+    try {
+      return await compute(parseSnapshot, bytes);
+    } catch (_) {
+      throw FuelApiException(_invalidData);
+    }
   }
 
-  Future<Object?> _getJson(String url) async => jsonDecode(utf8.decode(await _get(url)));
+  static const _invalidData = 'El servicio de precios ha devuelto datos no válidos. Inténtalo más tarde.';
+
+  Future<Object?> _getJson(String url) async {
+    final bytes = await _get(url);
+    try {
+      return jsonDecode(utf8.decode(bytes));
+    } catch (_) {
+      throw FuelApiException(_invalidData);
+    }
+  }
 
   Future<Uint8List> _get(String url) async {
     final http.Response res;

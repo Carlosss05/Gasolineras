@@ -308,17 +308,7 @@ class StationsController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_scopeKey);
       if (raw == null) return null;
-      final j = jsonDecode(raw) as Map<String, dynamic>;
-      final id = j['id'] as String, name = j['name'] as String;
-      return switch (ScopeKind.values.byName(j['kind'] as String)) {
-        ScopeKind.myTown when j['townId'] is String => SearchScope.myTown(id, j['townId'] as String, name),
-        // Formato antiguo sin municipio: se queda en la provincia.
-        ScopeKind.myTown => SearchScope.myProvince(id, name),
-        ScopeKind.myProvince => SearchScope.myProvince(id, name),
-        ScopeKind.province => SearchScope.province(id, name),
-        ScopeKind.community => SearchScope.community(id, name),
-        ScopeKind.spain => const SearchScope.spain(),
-      };
+      return SearchScope.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       return null;
     }
@@ -327,10 +317,7 @@ class StationsController extends ChangeNotifier {
   Future<void> _saveScope(SearchScope s) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _scopeKey,
-        jsonEncode({'kind': s.kind.name, 'id': s.id, 'name': s.name, 'townId': ?s.townId}),
-      );
+      await prefs.setString(_scopeKey, jsonEncode(s.toJson()));
     } catch (_) {
       // No es grave: la próxima vez se pedirá la zona otra vez.
     }

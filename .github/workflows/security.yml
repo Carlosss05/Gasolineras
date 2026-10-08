@@ -1,0 +1,33 @@
+# Comprobaciones de seguridad y rendimiento: en cada push a main y cada lunes
+# (las vulnerabilidades nuevas se publican aunque el código no cambie).
+# No bloquea la publicación de la web; si falla, GitHub avisa por correo.
+name: Seguridad y rendimiento
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Análisis estático
+        run: flutter analyze
+      - name: Tests de seguridad
+        run: flutter test test/security_test.dart
+      - name: Tests de rendimiento
+        run: flutter test test/performance_test.dart --reporter expanded
+      - name: Vulnerabilidades conocidas en dependencias (OSV)
+        run: dart run tool/osv_audit.dart

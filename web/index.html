@@ -24,6 +24,25 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- Política de seguridad: el navegador solo permite cargar código y
+       conectarse a los servidores que usa la app. Si alguien consiguiera
+       inyectar contenido, no podría ejecutar scripts ni enviar datos a otro
+       sitio. Al añadir un servicio nuevo hay que incluirlo aquí. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com;
+    style-src 'self' 'unsafe-inline';
+    connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com
+      https://sedeaplicaciones.minetur.gob.es https://nominatim.openstreetmap.org https://tile.openstreetmap.org;
+    img-src 'self' data: blob: https://tile.openstreetmap.org;
+    font-src 'self' data: https://fonts.gstatic.com;
+    worker-src 'self' blob:;
+    manifest-src 'self';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="theme-color" content="#0B8F5A">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Gasolineras">
@@ -34,6 +53,15 @@
 
   <title>Gasolineras baratas</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Arranque más rápido: el código de la app se descarga en paralelo con el
+       resto y las conexiones a los servidores que se usan nada más abrir
+       (motor de Flutter y precios) se preparan desde el principio. -->
+  <link rel="preload" href="main.dart.js" as="script">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://sedeaplicaciones.minetur.gob.es" crossorigin>
+  <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org">
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org">
   <style>
     /* Pantalla de carga mientras arranca Flutter (la tapa la propia app). */
     html, body { margin: 0; height: 100%; background: #0B8F5A; }
@@ -96,24 +124,7 @@
     </div>
     <button type="button" aria-label="Cerrar">×</button>
   </div>
-  <script>
-    (function () {
-      var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      var installed = navigator.standalone === true ||
-        window.matchMedia('(display-mode: standalone)').matches;
-      var dismissed = false;
-      try { dismissed = localStorage.getItem('install-dismissed') === '1'; } catch (e) {}
-      if (!ios || installed || dismissed) return;
-
-      var banner = document.getElementById('install');
-      banner.querySelector('button').addEventListener('click', function () {
-        banner.classList.remove('show');
-        try { localStorage.setItem('install-dismissed', '1'); } catch (e) {}
-      });
-      setTimeout(function () { banner.classList.add('show'); }, 4000);
-    })();
-  </script>
+  <script src="install.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

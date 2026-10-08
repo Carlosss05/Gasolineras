@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +18,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Nombres de meses en español para el diario de repostajes.
   await initializeDateFormatting('es');
+  // La tipografía va incluida en assets/google_fonts: nunca se descarga de
+  // Google (arranque más rápido, sin parpadeo de letra y sin conexión).
+  GoogleFonts.config.allowRuntimeFetching = false;
+  // Se cargan los pesos que usa la app antes de pintar, para que el texto no
+  // cambie de letra al aparecer. Como mucho 1,5 s: con red lenta no se espera.
+  for (final w in [FontWeight.w400, FontWeight.w500, FontWeight.w600, FontWeight.w700, FontWeight.w800]) {
+    GoogleFonts.plusJakartaSans(fontWeight: w);
+  }
+  await GoogleFonts.pendingFonts().timeout(const Duration(milliseconds: 1500), onTimeout: () => const []);
   final FuelPriceRepository repository = MineturRepository();
   final stations = StationsController(repository, LocationService());
   final garage = GarageController();

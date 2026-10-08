@@ -12,14 +12,29 @@ class CarProfile {
   /// Consumo medio, en litros cada 100 km.
   final double consumption;
 
+  /// Rangos admitidos (los mismos que en el formulario).
+  static const minTank = 10.0, maxTank = 200.0;
+  static const minConsumption = 2.0, maxConsumption = 30.0;
+
+  static bool isValid({required double tankLiters, required double consumption}) =>
+      tankLiters >= minTank &&
+      tankLiters <= maxTank &&
+      consumption >= minConsumption &&
+      consumption <= maxConsumption;
+
   Map<String, Object> toJson() => {'fuel': fuel.name, 'tank': tankLiters, 'consumption': consumption};
 
+  /// Lee lo guardado en el dispositivo. Como cualquiera puede manipularlo,
+  /// devuelve `null` ante tipos o valores fuera de rango.
   static CarProfile? fromJson(Map<String, dynamic> j) {
     try {
+      final tank = (j['tank'] as num).toDouble();
+      final consumption = (j['consumption'] as num).toDouble();
+      if (!isValid(tankLiters: tank, consumption: consumption)) return null;
       return CarProfile(
         fuel: FuelType.values.byName(j['fuel'] as String),
-        tankLiters: (j['tank'] as num).toDouble(),
-        consumption: (j['consumption'] as num).toDouble(),
+        tankLiters: tank,
+        consumption: consumption,
       );
     } catch (_) {
       return null;
@@ -73,18 +88,37 @@ class RefuelEntry {
     'avg': zoneAverage,
   };
 
+  /// Límites de un repostaje creíble (un camión cabe de sobra).
+  static const maxLiters = 1000.0, maxTotal = 10000.0, maxKm = 5000000.0;
+
+  static bool isValid({required double liters, required double totalEuros, double? odometerKm}) =>
+      liters > 0 &&
+      liters <= maxLiters &&
+      totalEuros > 0 &&
+      totalEuros <= maxTotal &&
+      (odometerKm == null || (odometerKm >= 0 && odometerKm <= maxKm));
+
+  /// Lee lo guardado en el dispositivo. Como cualquiera puede manipularlo,
+  /// devuelve `null` ante tipos o valores fuera de rango.
   static RefuelEntry? fromJson(Map<String, dynamic> j) {
     try {
+      final liters = (j['liters'] as num).toDouble();
+      final total = (j['total'] as num).toDouble();
+      final km = (j['km'] as num?)?.toDouble();
+      final avg = (j['avg'] as num?)?.toDouble();
+      if (!isValid(liters: liters, totalEuros: total, odometerKm: km)) return null;
+      final name = j['stationName'] as String?;
       return RefuelEntry(
         id: j['id'] as String,
         date: DateTime.parse(j['date'] as String),
         fuel: FuelType.values.byName(j['fuel'] as String),
-        liters: (j['liters'] as num).toDouble(),
-        totalEuros: (j['total'] as num).toDouble(),
+        liters: liters,
+        totalEuros: total,
         stationId: j['stationId'] as String?,
-        stationName: j['stationName'] as String?,
-        odometerKm: (j['km'] as num?)?.toDouble(),
-        zoneAverage: (j['avg'] as num?)?.toDouble(),
+        stationName: name != null && name.length > 200 ? name.substring(0, 200) : name,
+        odometerKm: km,
+        // Una media imposible no debe inflar el "ahorrado con la app".
+        zoneAverage: avg != null && avg > 0 && avg < 10 ? avg : null,
       );
     } catch (_) {
       return null;
