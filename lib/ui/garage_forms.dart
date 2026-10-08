@@ -31,6 +31,7 @@ class _CarForm extends StatefulWidget {
 }
 
 class _CarFormState extends State<_CarForm> {
+  bool _saving = false;
   late FuelType _fuel;
   late final TextEditingController _tank;
   late final TextEditingController _consumption;
@@ -126,12 +127,22 @@ class _CarFormState extends State<_CarForm> {
             ),
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: _valid
-                  ? () {
-                      context.read<GarageController>().setCar(
-                        CarProfile(fuel: _fuel, tankLiters: _tankValue!, consumption: _consumptionValue!),
-                      );
-                      Navigator.pop(context);
+              onPressed: _valid && !_saving
+                  ? () async {
+                      setState(() => _saving = true);
+                      try {
+                        await context.read<GarageController>().setCar(
+                          CarProfile(fuel: _fuel, tankLiters: _tankValue!, consumption: _consumptionValue!),
+                        );
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        setState(() => _saving = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('No se ha podido guardar el coche. Inténtalo de nuevo.')),
+                        );
+                      }
                     }
                   : null,
               child: const Text('Guardar'),
@@ -176,6 +187,7 @@ class _RefuelFormState extends State<_RefuelForm> {
   final _name = TextEditingController();
 
   Station? _station;
+  bool _saving = false;
   late FuelType _fuel;
   late DateTime _date;
 
@@ -293,7 +305,8 @@ class _RefuelFormState extends State<_RefuelForm> {
     if (d != null) setState(() => _date = d);
   }
 
-  void _save() {
+  Future<void> _save() async {
+    if (_saving) return;
     final garage = context.read<GarageController>();
     final stations = context.read<StationsController>();
     final previous = widget.existing;
@@ -314,11 +327,22 @@ class _RefuelFormState extends State<_RefuelForm> {
       odometerKm: parseDecimal(_km.text),
       zoneAverage: zoneAverage,
     );
-    if (previous == null) {
-      garage.addRefuel(entry);
-    } else {
-      garage.updateRefuel(entry);
+    setState(() => _saving = true);
+    try {
+      if (previous == null) {
+        await garage.addRefuel(entry);
+      } else {
+        await garage.updateRefuel(entry);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se ha podido guardar el repostaje. Inténtalo de nuevo.')),
+      );
+      return;
     }
+    if (!mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context);
@@ -474,7 +498,7 @@ class _RefuelFormState extends State<_RefuelForm> {
             ),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: _valid ? _save : null,
+              onPressed: _valid && !_saving ? _save : null,
               child: Text(_editing ? 'Guardar cambios' : 'Guardar repostaje'),
             ),
           ],

@@ -89,13 +89,19 @@ RefuelStats computeStats(List<RefuelEntry> entries, {required DateTime now}) {
     }
   }
 
-  final withKm = entries.where((e) => e.odometerKm != null).toList()
-    ..sort((a, b) => a.odometerKm!.compareTo(b.odometerKm!));
+  final chronological = entries.toList()..sort((a, b) => a.date.compareTo(b.date));
+  final withKm = chronological.where((e) => e.odometerKm != null).toList();
   double? consumption;
   if (withKm.length >= 2) {
     final distance = withKm.last.odometerKm! - withKm.first.odometerKm!;
-    final used = withKm.skip(1).fold<double>(0, (sum, e) => sum + e.liters);
-    if (distance > 0) consumption = used / distance * 100;
+    final first = chronological.indexOf(withKm.first);
+    final last = chronological.indexOf(withKm.last);
+    final used = chronological.sublist(first + 1, last + 1).fold<double>(0, (sum, e) => sum + e.liters);
+    final increasing = List.generate(
+      withKm.length - 1,
+      (i) => withKm[i + 1].odometerKm! > withKm[i].odometerKm!,
+    ).every((valid) => valid);
+    if (distance > 0 && increasing) consumption = used / distance * 100;
   }
 
   return RefuelStats(

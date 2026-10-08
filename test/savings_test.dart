@@ -110,6 +110,25 @@ void main() {
       expect(s.consumption, closeTo(6.5, 1e-9));
     });
 
+    test('incluye litros sin kilómetros solo dentro del intervalo medido', () {
+      final s = computeStats([
+        r(DateTime(2026, 10, 20), 25, 40), // fuera del intervalo
+        r(DateTime(2026, 10, 15), 30, 48, km: 11000),
+        r(DateTime(2026, 10, 10), 20, 32),
+        r(DateTime(2026, 10, 5), 40, 64, km: 10000),
+        r(DateTime(2026, 10, 1), 15, 24), // fuera del intervalo
+      ], now: DateTime(2026, 10, 25));
+      expect(s.consumption, closeTo(5, 1e-9));
+    });
+
+    test('no calcula consumo con cuentakilómetros decreciente', () {
+      final s = computeStats([
+        r(DateTime(2026, 10, 5), 40, 64, km: 11000),
+        r(DateTime(2026, 10, 15), 30, 48, km: 10000),
+      ], now: DateTime(2026, 10, 20));
+      expect(s.consumption, isNull);
+    });
+
     test('sin kilómetros suficientes no hay consumo', () {
       final s = computeStats([r(DateTime(2026, 10, 1), 30, 48, km: 1000)], now: DateTime(2026, 10, 2));
       expect(s.consumption, isNull);

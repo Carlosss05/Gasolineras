@@ -26,12 +26,16 @@ class GarageController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final carRaw = prefs.getString(_carKey);
-      if (carRaw != null) _car = CarProfile.fromJson(jsonDecode(carRaw) as Map<String, dynamic>);
+      try {
+        if (carRaw != null) _car = CarProfile.fromJson(jsonDecode(carRaw) as Map<String, dynamic>);
+      } catch (_) {
+        // Un coche corrupto no impide recuperar el diario.
+      }
       final logRaw = prefs.getString(_logKey);
       if (logRaw != null) {
         _refuels =
             (jsonDecode(logRaw) as List)
-                .map((j) => RefuelEntry.fromJson(j as Map<String, dynamic>))
+                .map((j) => j is Map<String, dynamic> ? RefuelEntry.fromJson(j) : null)
                 .whereType<RefuelEntry>()
                 .toList()
               ..sort((a, b) => b.date.compareTo(a.date));
@@ -44,34 +48,36 @@ class GarageController extends ChangeNotifier {
   }
 
   Future<void> setCar(CarProfile car) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(_carKey, jsonEncode(car.toJson()))) {
+      throw StateError('No se ha podido guardar el coche.');
+    }
     _car = car;
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_carKey, jsonEncode(car.toJson()));
   }
 
-  Future<void> addRefuel(RefuelEntry entry) async {
-    _refuels = [entry, ..._refuels]..sort((a, b) => b.date.compareTo(a.date));
-    notifyListeners();
-    await _saveLog();
-  }
+  Future<void> addRefuel(RefuelEntry entry) => _saveLog(
+    [entry, ..._refuels]..sort((a, b) => b.date.compareTo(a.date)),
+  );
 
   /// Sustituye un repostaje ya anotado (mismo `id`) por su versión editada.
-  Future<void> updateRefuel(RefuelEntry entry) async {
-    _refuels = [for (final e in _refuels) e.id == entry.id ? entry : e]
-      ..sort((a, b) => b.date.compareTo(a.date));
-    notifyListeners();
-    await _saveLog();
-  }
+  Future<void> updateRefuel(RefuelEntry entry) => _saveLog(
+    [for (final e in _refuels) e.id == entry.id ? entry : e]
+      ..sort((a, b) => b.date.compareTo(a.date)),
+  );
 
   Future<void> removeRefuel(String id) async {
     _refuels = _refuels.where((e) => e.id != id).toList();
     notifyListeners();
-    await _saveLog();
+    await _saveLog(_refuels);
   }
 
-  Future<void> _saveLog() async {
+  Future<void> _saveLog(List<RefuelEntry> entries) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_logKey, jsonEncode([for (final e in _refuels) e.toJson()]));
+    if (!await prefs.setString(_logKey, jsonEncode([for (final e in entries) e.toJson()]))) {
+      throw StateError('No se ha podido guardar el diario.');
+    }
+    _refuels = entries;
+    notifyListeners();
   }
 }
