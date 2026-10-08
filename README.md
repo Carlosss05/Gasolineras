@@ -32,11 +32,13 @@ Encuentra la gasolinera más barata de tu pueblo con precios oficiales actualiza
 | 📍 **Tu pueblo, automáticamente** | Detecta dónde estás y muestra las gasolineras de tu municipio (Calpe, Elche…). Cambia sola al moverte. |
 | 🏆 **La más barata, destacada** | Te dice cuánto ahorras llenando 50 L frente a la media de la zona, con un botón para ir directamente. |
 | ⏱️ **Precios al momento** | Datos oficiales del Ministerio para la Transición Ecológica, que se actualizan cada ~30 min. La app los refresca sola. |
-| ↕️ **Ordena como quieras** | De más barata a más cara, o por cercanía. Las distancias se recalculan mientras te desplazas. |
+| ↕️ **Ordena como quieras** | Por precio, cercanía o **Rentables**: con tu coche configurado, compara el coste de llenar el depósito y del viaje de ida y vuelta. También en favoritas. |
 | 🗺️ **Mapa** | Etiquetas con el precio, de verde (barata) a rojo (cara). Se ven más a medida que te acercas. |
 | 🔎 **Busca en toda España** | Pueblo, marca o código postal. Si está en otra provincia, te sugiere ir allí («Calpe/Calp · Alicante»). |
 | ⭐ **Favoritas** | Guarda tus gasolineras habituales y consulta su precio de hoy aunque estén en otra provincia. |
 | ⛽ **7 combustibles** | Gasolina 95, 95 E10, 98, Diésel, Diésel Premium, GLP y GNC. |
+| 🚗 **Mi coche** | Configura combustible, capacidad del depósito y consumo para personalizar las comparaciones. |
+| 🧾 **Diario de repostajes** | Anota y edita litros, importe, fecha y kilómetros. Consulta gastos del mes, precio medio pagado, ahorro y consumo. |
 | 🌙 **Modo claro y oscuro** | Según el ajuste de tu móvil. |
 
 ## 📲 Instalación
@@ -59,17 +61,37 @@ flowchart LR
 
 1. La app obtiene tu posición y averigua la **provincia y el municipio**, con el geocodificador del sistema o con OpenStreetMap (Nominatim) en la web.
 2. Descarga las gasolineras de tu provincia de la **API pública del Ministerio** (unos 200 KB) y filtra las de tu pueblo.
-3. Ordena por precio o distancia, y recalcula las distancias cada 100 m que te mueves.
-4. Recuerda la última zona para que, al volver a abrirla, los precios salgan al instante.
+3. Ordena por precio, distancia o coste estimado con tu coche, y recalcula las distancias cada 100 m que te mueves.
+4. Recuerda la última zona para recuperarla al volver a abrir la app.
+
+### Mi coche y diario de repostajes
+
+En **Mi coche**, configura el combustible, el depósito y el consumo medio. La opción
+**Rentables** suma el precio de llenar el depósito y el combustible estimado del viaje
+de ida y vuelta. La distancia se calcula en línea recta: es una orientación, no una
+ruta por carretera.
+
+Puedes anotar repostajes desde una gasolinera o desde el diario y editarlos después.
+El formulario confirma el guardado cuando termina el almacenamiento; si falla,
+permanece abierto y permite reintentarlo. El coche y el historial se guardan en el
+dispositivo, sin sincronización entre dispositivos.
+
+El consumo se estima entre el primer y el último registro con kilómetros, incluyendo
+los litros de los repostajes intermedios aunque no tengan kilometraje. Para que sea
+representativo, llena el depósito en ambos extremos del intervalo y registra todos
+los repostajes. Si el cuentakilómetros no aumenta entre registros, no se muestra consumo.
+El ahorro compara el importe pagado con la media de la zona registrada al anotar;
+al editar con el mismo combustible se conserva esa referencia.
 
 ## 🏗️ Arquitectura
 
 ```
 lib/
 ├── data/       FuelPriceRepository (interfaz) · MineturRepository (API del Ministerio, con caché)
-├── models/     Station · FuelType · Province, Community, Municipality, SearchScope
+├── models/     Station · FuelType · CarProfile · RefuelEntry · Province, Community, Municipality, SearchScope
+├── logic/      Coste del viaje, comparación de ahorro y estadísticas del diario
 ├── services/   LocationService (GPS, provincia y municipio)
-├── state/      StationsController · FavoritesController (provider)
+├── state/      StationsController · FavoritesController · GarageController (provider)
 ├── ui/         Pantallas, mapa, tema (theme.dart) e insignias de marca
 └── utils/      Normalización de textos (búsquedas sin tildes)
 ```
@@ -83,20 +105,32 @@ lib/
 
 ## 🛠️ Desarrollo
 
-Requisitos: [Flutter](https://docs.flutter.dev/get-started/install) 3.41 o superior.
+Requisitos: [Flutter](https://docs.flutter.dev/get-started/install) estable compatible con Dart **>=3.11.5 <4.0.0** y Flutter **>=3.41.0**, según `pubspec.yaml` y `pubspec.lock`. Comprueba ambos con `flutter --version`. Para la versión web, necesitas Chrome; para Android, el SDK de Android; para iOS, macOS y Xcode.
 
 ```bash
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter run              # en un móvil conectado o un emulador
 flutter run -d chrome    # versión web
-flutter test             # tests unitarios
+flutter analyze          # análisis estático
+flutter test             # pruebas unitarias y de widgets
+flutter build web --release --base-href /Gasolineras/  # compilación para GitHub Pages
 ```
+
+### Pruebas de regresión
+
+```bash
+flutter test test/savings_test.dart test/favorites_screen_test.dart test/garage_controller_test.dart test/garage_forms_test.dart
+```
+
+Estas pruebas cubren el consumo con repostajes intermedios sin kilómetros, la
+ordenación de favoritas por coste del viaje, la recuperación del diario cuando el
+JSON del coche está corrupto y la confirmación del guardado tras completarse o fallar.
 
 ### Calidad: rendimiento y seguridad
 
 ```bash
 flutter test test/performance_test.dart --reporter expanded   # tiempos con datos de toda España
-flutter test test/security_test.dart                          # 22 pruebas de seguridad
+flutter test test/security_test.dart                          # validación de datos y configuración de seguridad
 dart run tool/osv_audit.dart                                  # vulnerabilidades conocidas en dependencias
 ```
 
