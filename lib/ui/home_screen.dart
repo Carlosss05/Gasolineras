@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../logic/savings.dart';
 import '../models/car.dart';
+import '../platform/web_diagnostics.dart';
 import '../models/fuel_type.dart';
 import '../models/region.dart';
 import '../models/station.dart';
@@ -91,7 +92,8 @@ class _Header extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const AppLogo(size: 40),
+                  // Mantener pulsado el logo abre el panel de diagnóstico de pantalla (web).
+                  GestureDetector(onLongPress: showWebDiagnostics, child: const AppLogo(size: 40)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

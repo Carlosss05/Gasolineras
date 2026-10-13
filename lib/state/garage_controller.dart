@@ -56,14 +56,12 @@ class GarageController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addRefuel(RefuelEntry entry) => _saveLog(
-    [entry, ..._refuels]..sort((a, b) => b.date.compareTo(a.date)),
-  );
+  Future<void> addRefuel(RefuelEntry entry) =>
+      _saveLog([entry, ..._refuels]..sort((a, b) => b.date.compareTo(a.date)));
 
   /// Sustituye un repostaje ya anotado (mismo `id`) por su versión editada.
   Future<void> updateRefuel(RefuelEntry entry) => _saveLog(
-    [for (final e in _refuels) e.id == entry.id ? entry : e]
-      ..sort((a, b) => b.date.compareTo(a.date)),
+    [for (final e in _refuels) e.id == entry.id ? entry : e]..sort((a, b) => b.date.compareTo(a.date)),
   );
 
   Future<void> removeRefuel(String id) async {

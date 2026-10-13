@@ -63,26 +63,36 @@
   <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org">
   <link rel="dns-prefetch" href="https://tile.openstreetmap.org">
   <style>
-    /* Pantalla de carga mientras arranca Flutter (la tapa la propia app). */
-    /* Verde arriba (detrás de la barra de estado del iPhone) y el color de
-       la lista abajo: si quedara algún hueco no se ve un bloque verde. */
-    /* iPhone con la app instalada: con la barra de estado transparente
-       (black-translucent) iOS sube el documento para dibujar detrás del reloj,
-       pero sigue midiendo la ventana sin esa franja, así que abajo quedaba un
-       hueco. Solución: el documento mide 100% + la zona del notch, y la app
-       va dentro del documento (no fijada a la ventana), hasta abajo del todo.
-       En el resto de navegadores env(...) vale 0 y no cambia nada. */
-    html {
-      height: calc(100% + env(safe-area-inset-top, 0px));
-      overflow: hidden;
+    /* La página no se desplaza: solo se mueve el contenido de la app. Fondo
+       verde arriba (detrás de la barra de estado del iPhone) y del color de
+       la lista abajo. */
+    html, body {
+      margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
       background: linear-gradient(#0B8F5A 0 50%, #F2F6F3 50%);
     }
-    body { margin: 0; position: relative; height: 100%; overflow: hidden; }
     @media (prefers-color-scheme: dark) {
-      html { background: linear-gradient(#0B8F5A 0 50%, #0E1512 50%); }
+      html, body { background: linear-gradient(#0B8F5A 0 50%, #0E1512 50%); }
     }
+
+    /* Contenedor de la app: empieza bajo la barra de estado y el notch (esa
+       franja queda del verde de la marca) y llega hasta abajo. */
+    #app {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      top: env(safe-area-inset-top, 0px);
+    }
+
+    /* App instalada en el iPhone: ahí "100%" puede valer la altura sin la
+       barra de estado y dejar un hueco abajo; 100vh es la única medida que
+       iOS da bien desde el arranque. El otro fallo de iOS (la ventana se
+       encoge al abrir el teclado y no se recupera) lo corrige ios-viewport.js. */
+    @media (display-mode: standalone) {
+      html, body { height: 100vh; }
+      #app { bottom: auto; height: calc(100vh - env(safe-area-inset-top, 0px)); }
+    }
+
+    /* Pantalla de carga mientras arranca Flutter (la tapa la propia app). */
     #splash {
-      position: absolute; inset: 0; display: flex; flex-direction: column;
+      position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 18px;
       background: linear-gradient(135deg, #10AA6C, #0F766E);
       color: #fff; font: 600 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -95,13 +105,6 @@
     }
     @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
     #splash { z-index: 2; }
-
-    /* Contenedor de la app: empieza bajo la barra de estado y el notch (esa
-       franja queda del verde de la marca) y llega al final del documento. */
-    #app {
-      position: absolute; left: 0; right: 0; bottom: 0;
-      top: env(safe-area-inset-top, 0px);
-    }
 
     /* Aviso para instalar la app en iPhone (Safari no lo sugiere solo). */
     #install {
@@ -140,6 +143,8 @@
     </div>
     <button type="button" aria-label="Cerrar">×</button>
   </div>
+  <script src="ios-viewport.js"></script>
+  <script src="diag.js"></script>
   <script src="install.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
