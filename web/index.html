@@ -64,7 +64,12 @@
   <link rel="dns-prefetch" href="https://tile.openstreetmap.org">
   <style>
     /* Pantalla de carga mientras arranca Flutter (la tapa la propia app). */
-    html, body { margin: 0; height: 100%; background: #0B8F5A; }
+    /* Verde arriba (detrás de la barra de estado del iPhone) y el color de
+       la lista abajo: si quedara algún hueco no se ve un bloque verde. */
+    html, body { margin: 0; height: 100%; background: linear-gradient(#0B8F5A 0 50%, #F2F6F3 50%); }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: linear-gradient(#0B8F5A 0 50%, #0E1512 50%); }
+    }
     #splash {
       position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 18px;
@@ -124,6 +129,7 @@
     </div>
     <button type="button" aria-label="Cerrar">×</button>
   </div>
+  <script src="viewport.js"></script>
   <script src="install.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

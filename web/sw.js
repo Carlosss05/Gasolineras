@@ -9,7 +9,7 @@
 //   respuesta guardada (la app muestra la fecha de publicación de esos precios).
 // - Teselas del mapa: caché primero, con un máximo de entradas.
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const APP = `app-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 const PRICES = `prices-${VERSION}`;
@@ -17,6 +17,7 @@ const TILES = `tiles-${VERSION}`;
 const MAX_TILES = 400;
 
 const SHELL = ['./', 'index.html', 'main.dart.js', 'flutter.js', 'flutter_bootstrap.js', 'manifest.json',
+  'viewport.js', 'install.js',
   'icons/Icon-192.png', 'favicon.png'];
 
 self.addEventListener('install', (event) => {

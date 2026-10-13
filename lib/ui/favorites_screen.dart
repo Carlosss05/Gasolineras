@@ -125,7 +125,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       return RefreshIndicator(
                         onRefresh: _reload,
                         child: ListView(
-                          padding: const EdgeInsets.only(top: 4, bottom: 24),
+                          padding: const EdgeInsets.only(top: 4, bottom: 56),
                           children: [
                             for (final e in withFuel)
                               StationTile(
