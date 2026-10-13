@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'data/fuel_price_repository.dart';
 import 'data/minetur_repository.dart';
 import 'models/car.dart';
+import 'platform/web_insets.dart';
 import 'services/location_service.dart';
 import 'state/favorites_controller.dart';
 import 'state/garage_controller.dart';
@@ -27,6 +28,8 @@ Future<void> main() async {
     GoogleFonts.plusJakartaSans(fontWeight: w);
   }
   await GoogleFonts.pendingFonts().timeout(const Duration(milliseconds: 1500), onTimeout: () => const []);
+  // Web en iPhone: zona tapada abajo por la barra de Safari (ver web/ios-viewport.js).
+  initWebInsets();
   final FuelPriceRepository repository = MineturRepository();
   final stations = StationsController(repository, LocationService());
   final garage = GarageController();
@@ -68,6 +71,23 @@ class GasolinerasApp extends StatelessWidget {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
+      // En la web de iPhone la app se dibuja también detrás de la barra de
+      // cristal de Safari; esa zona se añade como margen inferior (igual que
+      // el indicador de inicio en una app nativa) para que nada quede tapado.
+      builder: (context, child) => ValueListenableBuilder<double>(
+        valueListenable: webBottomInset,
+        builder: (context, inset, _) {
+          final mq = MediaQuery.of(context);
+          if (inset <= mq.padding.bottom) return child!;
+          return MediaQuery(
+            data: mq.copyWith(
+              padding: mq.padding.copyWith(bottom: inset),
+              viewPadding: mq.viewPadding.copyWith(bottom: inset),
+            ),
+            child: child!,
+          );
+        },
+      ),
       home: const HomeScreen(),
     );
   }

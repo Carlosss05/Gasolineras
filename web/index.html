@@ -63,31 +63,48 @@
   <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org">
   <link rel="dns-prefetch" href="https://tile.openstreetmap.org">
   <style>
-    /* La página no se desplaza: solo se mueve el contenido de la app. Fondo
-       verde arriba (detrás de la barra de estado del iPhone) y del color de
-       la lista abajo. */
-    html, body {
-      margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
-      background: linear-gradient(#0B8F5A 0 50%, #F2F6F3 50%);
+    /* Color de fondo = el de la lista de la app. iOS rellena con el
+       background-COLOR (no con degradados) las zonas donde no llega la web;
+       sin él pintaba blanco. El verde va como imagen en la mitad de arriba,
+       detrás del reloj. */
+    html {
+      background-color: #F2F6F3;
+      background-image: linear-gradient(#0B8F5A, #0B8F5A);
+      background-size: 100% 50%;
+      background-repeat: no-repeat;
     }
     @media (prefers-color-scheme: dark) {
-      html, body { background: linear-gradient(#0B8F5A 0 50%, #0E1512 50%); }
+      html { background-color: #0E1512; }
     }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body { background: transparent; }
 
-    /* Contenedor de la app: empieza bajo la barra de estado y el notch (esa
-       franja queda del verde de la marca) y llega hasta abajo. */
+    /* Contenedor de la app (Android, ordenador): fijo a la ventana, bajo la
+       barra de estado y hasta abajo. */
     #app {
       position: fixed; left: 0; right: 0; bottom: 0;
       top: env(safe-area-inset-top, 0px);
     }
 
-    /* App instalada en el iPhone: ahí "100%" puede valer la altura sin la
-       barra de estado y dejar un hueco abajo; 100vh es la única medida que
-       iOS da bien desde el arranque. El otro fallo de iOS (la ventana se
-       encoge al abrir el teclado y no se recupera) lo corrige ios-viewport.js. */
-    @media (display-mode: standalone) {
-      html, body { height: 100vh; }
-      #app { bottom: auto; height: calc(100vh - env(safe-area-inset-top, 0px)); }
+    /* iPhone (Safari e instalada). iOS 26 NO dibuja los elementos fijos
+       (position: fixed) por debajo de su barra flotante de cristal ni en la
+       zona del indicador de inicio: ahí quedaba una franja de color sólido.
+       El contenido normal de la página sí se ve a través de la barra, así que
+       en iPhone la app va dentro de la página (absolute) y con la altura
+       completa de la pantalla (100lvh). ios-viewport.js añade la clase "ios"
+       y le dice a la app cuánto queda tapado abajo para que deje margen. */
+    html.ios, html.ios body { height: auto; min-height: 100%; overflow: visible; }
+    html.ios #app {
+      position: absolute; bottom: auto;
+      height: calc(100vh - env(safe-area-inset-top, 0px));
+      height: calc(100lvh - env(safe-area-inset-top, 0px));
+    }
+
+    /* Tinte verde de la barra de estado en Safari (iOS 26 toma el color de
+       los elementos fijos pegados al borde superior). */
+    #top-tint {
+      position: fixed; top: 0; left: 0; right: 0; z-index: -1; pointer-events: none;
+      height: max(1px, env(safe-area-inset-top, 0px)); background-color: #0B8F5A;
     }
 
     /* Pantalla de carga mientras arranca Flutter (la tapa la propia app). */
@@ -133,6 +150,7 @@
     <div>Buscando los mejores precios…</div>
     <div class="bar"></div>
   </div>
+  <div id="top-tint" aria-hidden="true"></div>
   <div id="app"></div>
   <div id="install" role="dialog" aria-label="Instalar la app">
     <img src="icons/Icon-192.png" alt="">

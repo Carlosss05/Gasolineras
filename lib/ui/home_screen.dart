@@ -631,8 +631,8 @@ class _StationList extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: c.refresh,
       child: ListView.builder(
-        // Margen final: que la última no quede bajo la barra de inicio del iPhone.
-        padding: const EdgeInsets.only(top: 4, bottom: 56),
+        // Margen final: que la última no quede bajo la barra de Safari o el indicador de inicio.
+        padding: EdgeInsets.only(top: 4, bottom: 24 + MediaQuery.paddingOf(context).bottom),
         itemCount: header.length + entries.length,
         itemBuilder: (context, i) {
           if (i < header.length) return header[i];

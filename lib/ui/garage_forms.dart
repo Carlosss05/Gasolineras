@@ -62,7 +62,12 @@ class _CarFormState extends State<_CarForm> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom + MediaQuery.paddingOf(context).bottom,
+      ),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -369,7 +374,12 @@ class _RefuelFormState extends State<_RefuelForm> {
         : FuelType.values.where(_station!.prices.containsKey).toList();
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom + MediaQuery.paddingOf(context).bottom,
+      ),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -567,6 +577,7 @@ class _StationPickerState extends State<_StationPicker> {
                     ),
                   )
                 : ListView.builder(
+                    padding: EdgeInsets.only(bottom: 16 + MediaQuery.paddingOf(context).bottom),
                     itemCount: visible.length,
                     itemBuilder: (context, i) {
                       final e = visible[i];

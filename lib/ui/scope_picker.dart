@@ -505,7 +505,7 @@ class _RegionListPageState<T> extends State<_RegionListPage<T>> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: EdgeInsets.only(bottom: 24 + MediaQuery.paddingOf(context).bottom),
               itemCount: rows.length,
               itemBuilder: (context, i) {
                 final row = rows[i];

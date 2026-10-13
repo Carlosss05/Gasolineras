@@ -143,18 +143,18 @@ class _StationsMapState extends State<StationsMap> {
                 if (user != null) Marker(point: user, width: 22, height: 22, child: const _UserDot()),
               ],
             ),
-            RichAttributionWidget(
-              alignment: AttributionAlignment.bottomLeft,
-              attributions: [
-                TextSourceAttribution(
-                  'OpenStreetMap contributors',
-                  onTap: () => launchUrl(Uri.parse('https://www.openstreetmap.org/copyright')),
-                ),
-                TextSourceAttribution(
-                  'CARTO',
-                  onTap: () => launchUrl(Uri.parse('https://carto.com/attributions')),
-                ),
-              ],
+            // Por encima de la zona tapada (barra de Safari en iPhone).
+            Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+              child: RichAttributionWidget(
+                alignment: AttributionAlignment.bottomLeft,
+                attributions: [
+                  TextSourceAttribution(
+                    'OpenStreetMap contributors',
+                    onTap: () => launchUrl(Uri.parse('https://www.openstreetmap.org/copyright')),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -192,7 +192,7 @@ class _StationsMapState extends State<StationsMap> {
           ),
         Positioned(
           right: 12,
-          bottom: 24,
+          bottom: 24 + MediaQuery.paddingOf(context).bottom,
           child: Column(
             children: [
               FloatingActionButton.small(

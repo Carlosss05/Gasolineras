@@ -26,7 +26,7 @@ class GarageScreen extends StatelessWidget {
         label: const Text('Anotar repostaje'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+        padding: EdgeInsets.fromLTRB(16, 4, 16, 96 + MediaQuery.paddingOf(context).bottom),
         children: [
           _CarCard(car: car),
           const SizedBox(height: 16),
