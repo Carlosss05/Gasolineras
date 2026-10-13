@@ -8,6 +8,7 @@ import 'package:gasolineras/services/location_service.dart';
 import 'package:gasolineras/state/garage_controller.dart';
 import 'package:gasolineras/state/stations_controller.dart';
 import 'package:gasolineras/ui/garage_forms.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 
 class _PendingGarage extends GarageController {
@@ -22,28 +23,38 @@ class _PendingGarage extends GarageController {
 }
 
 void main() {
+  // El formulario muestra la fecha con meses en español; la app los carga en
+  // main(), así que el test también.
+  setUpAll(() => initializeDateFormatting('es'));
+
   for (final fails in [false, true]) {
     testWidgets('guardar espera al almacenamiento; fallo: $fails', (tester) async {
       final garage = _PendingGarage();
       final stations = StationsController(MineturRepository(), LocationService());
       addTearDown(garage.dispose);
       addTearDown(stations.dispose);
-      await tester.pumpWidget(MultiProvider(
-        providers: [
-          ChangeNotifierProvider<GarageController>.value(value: garage),
-          ChangeNotifierProvider<StationsController>.value(value: stations),
-        ],
-        child: MaterialApp(home: Scaffold(body: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showRefuelForm(context),
-            child: const Text('Abrir'),
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GarageController>.value(value: garage),
+            ChangeNotifierProvider<StationsController>.value(value: stations),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) =>
+                    TextButton(onPressed: () => showRefuelForm(context), child: const Text('Abrir')),
+              ),
+            ),
           ),
-        ))),
-      ));
+        ),
+      );
       await tester.tap(find.text('Abrir'));
       await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, 'Importe'), '48');
       await tester.enterText(find.widgetWithText(TextField, 'Litros'), '30');
+      // Redibuja para que el botón "Guardar" se active con los datos escritos.
+      await tester.pump();
       final save = find.widgetWithText(FilledButton, 'Guardar repostaje');
       await tester.ensureVisible(save);
       await tester.tap(save);

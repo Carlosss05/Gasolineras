@@ -25,7 +25,7 @@ class _Repository extends MineturRepository {
 }
 
 class _LocatedController extends StationsController {
-  _LocatedController(FuelPriceRepository repo, LocationService location) : super(repo, location);
+  _LocatedController(super.repo, super.location);
 
   @override
   Position get position => Position(
@@ -71,14 +71,16 @@ void main() {
     for (final s in items) {
       await favorites.toggle(s);
     }
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        Provider<FuelPriceRepository>.value(value: repo),
-        ChangeNotifierProvider<FavoritesController>.value(value: favorites),
-        ChangeNotifierProvider<StationsController>.value(value: controller),
-      ],
-      child: const MaterialApp(home: FavoritesScreen()),
-    ));
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<FuelPriceRepository>.value(value: repo),
+          ChangeNotifierProvider<FavoritesController>.value(value: favorites),
+          ChangeNotifierProvider<StationsController>.value(value: controller),
+        ],
+        child: const MaterialApp(home: FavoritesScreen()),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(tester.widgetList<StationTile>(find.byType(StationTile)).first.station.id, 'cerca');
     controller.setSort(SortMode.price);

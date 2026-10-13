@@ -45,13 +45,7 @@ void main() {
     final garage = GarageController();
     addTearDown(garage.dispose);
     await garage.addRefuel(entry);
-    final edited = RefuelEntry(
-      id: entry.id,
-      date: entry.date,
-      fuel: entry.fuel,
-      liters: 40,
-      totalEuros: 64,
-    );
+    final edited = RefuelEntry(id: entry.id, date: entry.date, fuel: entry.fuel, liters: 40, totalEuros: 64);
     await garage.updateRefuel(edited);
     final restored = GarageController();
     addTearDown(restored.dispose);
