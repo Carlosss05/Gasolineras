@@ -62,6 +62,23 @@ jobs:
           mv "$OUT/app-release.apk" "Gasolineras-$VERSION-universal.apk"
           ls -lh Gasolineras-*.apk
 
+      # Instrucciones de instalación + las novedades de esta versión en CHANGELOG.md.
+      - name: Notas de la versión
+        run: |
+          {
+            echo "Descarga **Gasolineras-$VERSION.apk** desde el móvil Android y ábrelo para instalarlo."
+            echo "Si Android lo pide, permite instalar apps de fuentes desconocidas para tu navegador."
+            echo
+            echo "¿No se instala? Tu móvil es muy antiguo: usa **Gasolineras-$VERSION-universal.apk** (más pesado, funciona en todos)."
+            echo
+            echo "En iPhone y en el ordenador: https://carlosss05.github.io/Gasolineras/"
+            echo
+            if [ -f CHANGELOG.md ]; then
+              awk -v head="## $VERSION" 'index($0, "## ") == 1 { show = index($0, head) == 1 } show' CHANGELOG.md
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
       - name: Publicar en Releases
         uses: softprops/action-gh-release@v2
         with:
@@ -69,8 +86,4 @@ jobs:
           name: Gasolineras ${{ env.VERSION }} (build ${{ github.run_number }})
           files: Gasolineras-*.apk
           make_latest: true
-          body: |
-            Descarga **Gasolineras-${{ env.VERSION }}.apk** desde el móvil Android y ábrelo para instalarlo.
-            Si Android lo pide, permite instalar apps de fuentes desconocidas para tu navegador.
-
-            ¿No se instala? Tu móvil es muy antiguo: usa **Gasolineras-${{ env.VERSION }}-universal.apk** (más pesado, funciona en todos).
+          body_path: release-notes.md
