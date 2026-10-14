@@ -23,6 +23,9 @@ import 'widgets/station_tile.dart';
 /// Litros de referencia si el usuario no ha configurado su coche.
 const _defaultTankLiters = 50.0;
 
+/// A partir de cuánto desplazamiento la cabecera grande deja paso a la barra mínima.
+const _collapseOffset = 120.0;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -33,186 +36,157 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showMap = false;
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
+  final _scroll = ScrollController();
+  final _collapsed = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_syncCollapsed);
+  }
 
   @override
   void dispose() {
     _search.dispose();
+    _searchFocus.dispose();
+    _scroll.dispose();
+    _collapsed.dispose();
     super.dispose();
+  }
+
+  void _syncCollapsed() {
+    _collapsed.value = _scroll.hasClients && _scroll.offset > _collapseOffset;
+  }
+
+  void _toggleMap() {
+    setState(() => _showMap = !_showMap);
+    // La lista puede volver a la posición en la que estaba.
+    _collapsed.value = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncCollapsed();
+    });
+  }
+
+  /// Desde la barra mínima: vuelve arriba y abre el buscador.
+  Future<void> _openSearch() async {
+    if (_scroll.hasClients && _scroll.offset > 0) {
+      await _scroll.animateTo(0, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic);
+    }
+    if (mounted) _searchFocus.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
+    final header = _Header(search: _search, focus: _searchFocus, showMap: _showMap, onToggleMap: _toggleMap);
     return Scaffold(
-      body: Column(
-        children: [
-          _Header(
-            search: _search,
-            showMap: _showMap,
-            onToggleMap: () => setState(() => _showMap = !_showMap),
-          ),
-          const FiltersBar(),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _showMap ? const _MapView() : const _StationList(),
+      body: _showMap
+          ? _MapView(header: header)
+          : Stack(
+              children: [
+                _StationList(controller: _scroll, header: header),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _collapsed,
+                    builder: (context, collapsed, _) =>
+                        _CollapsedBar(visible: collapsed, onSearch: _openSearch, onToggleMap: _toggleMap),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-/// Cabecera con degradado: marca, acciones, zona y buscador.
+void _openFavorites(BuildContext context) {
+  Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const FavoritesScreen()));
+}
+
+void _openGarage(BuildContext context) {
+  Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const GarageScreen()));
+}
+
+/// Cabecera compacta: marca y accesos, y el buscador con la zona dentro. Va
+/// dentro de la lista y se desplaza con ella; al bajar la sustituye
+/// [_CollapsedBar].
 class _Header extends StatelessWidget {
-  const _Header({required this.search, required this.showMap, required this.onToggleMap});
+  const _Header({required this.search, required this.focus, required this.showMap, required this.onToggleMap});
 
   final TextEditingController search;
+  final FocusNode focus;
   final bool showMap;
   final VoidCallback onToggleMap;
+
+  /// Alto total: fila de 44 + buscador de 50 + márgenes, más la barra de
+  /// estado y la de recarga. El mapa lo usa para saber qué parte queda tapada.
+  static double heightOf(BuildContext context, {required bool refreshing}) =>
+      MediaQuery.paddingOf(context).top + 128 + (refreshing ? 13 : 0);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final c = context.watch<StationsController>();
-    final scope = c.scope;
     final refreshing = c.loading && c.snapshot != null;
 
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: AppColors.headerGradient,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(26)),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 12, 16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  // Mantener pulsado el logo abre el panel de diagnóstico de pantalla (web).
-                  GestureDetector(onLongPress: showWebDiagnostics, child: const AppLogo(size: 40)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Gasolineras',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                          ),
+              SizedBox(
+                height: 44,
+                child: Row(
+                  children: [
+                    // Mantener pulsado el logo abre el panel de diagnóstico de pantalla (web).
+                    GestureDetector(onLongPress: showWebDiagnostics, child: const AppLogo(size: 36)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Gasolineras',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
                         ),
-                        Text(
-                          'Llena el depósito por menos',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _HeaderButton(
-                    tooltip: showMap ? 'Ver lista' : 'Ver mapa',
-                    icon: showMap ? Icons.view_agenda_outlined : Icons.map_outlined,
-                    onPressed: onToggleMap,
-                  ),
-                  const SizedBox(width: 4),
-                  _HeaderButton(
-                    tooltip: 'Favoritas',
-                    icon: Icons.star_outline_rounded,
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(builder: (_) => const FavoritesScreen()),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  _HeaderButton(
-                    tooltip: 'Mi coche',
-                    icon: Icons.directions_car_outlined,
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(builder: (_) => const GarageScreen()),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Material(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  shape: const StadiumBorder(),
-                  child: InkWell(
-                    customBorder: const StadiumBorder(),
-                    onTap: () => showScopePicker(context),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            scope?.followsLocation ?? false ? Icons.my_location : Icons.place_outlined,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 6),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 240),
-                            child: Text(
-                              scope?.label ?? 'Elegir zona',
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.expand_more_rounded, color: Colors.white, size: 20),
-                        ],
                       ),
                     ),
-                  ),
+                    _HeaderButton(
+                      tooltip: showMap ? 'Ver lista' : 'Ver mapa',
+                      icon: showMap ? Icons.view_agenda_outlined : Icons.map_outlined,
+                      selected: showMap,
+                      onPressed: onToggleMap,
+                    ),
+                    const SizedBox(width: 4),
+                    _HeaderButton(
+                      tooltip: 'Favoritas',
+                      icon: Icons.star_outline_rounded,
+                      onPressed: () => _openFavorites(context),
+                    ),
+                    const SizedBox(width: 4),
+                    _HeaderButton(
+                      tooltip: 'Mi coche',
+                      icon: Icons.directions_car_outlined,
+                      onPressed: () => _openGarage(context),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.only(right: 4),
-                child: ValueListenableBuilder(
-                  valueListenable: search,
-                  builder: (context, value, _) => TextField(
-                    controller: search,
-                    onChanged: c.setQuery,
-                    textInputAction: TextInputAction.search,
-                    style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.ink),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white,
-                      hintText: 'Busca un pueblo, marca o código postal',
-                      hintStyle: theme.textTheme.bodyMedium?.copyWith(color: const Color(0xFF7A8A82)),
-                      prefixIcon: const Icon(Icons.search_rounded, color: AppColors.emerald),
-                      suffixIcon: value.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Borrar',
-                              icon: const Icon(Icons.close_rounded, color: Color(0xFF7A8A82)),
-                              onPressed: () {
-                                search.clear();
-                                c.setQuery('');
-                              },
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
+                child: _SearchField(controller: search, focus: focus),
               ),
               if (refreshing) ...[
                 const SizedBox(height: 10),
@@ -233,12 +207,126 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// Buscador blanco con la zona elegida a la derecha.
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.controller, required this.focus});
+
+  final TextEditingController controller;
+  final FocusNode focus;
+
+  static const _muted = Color(0xFF5F6F67);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.read<StationsController>();
+
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.only(left: 14, right: 7),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        children: [
+          const Icon(Icons.search_rounded, color: AppColors.emeraldDeep, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focus,
+              onChanged: c.setQuery,
+              textInputAction: TextInputAction.search,
+              cursorColor: AppColors.emeraldDeep,
+              style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.ink),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: 'Pueblo, marca o CP',
+                hintMaxLines: 1,
+                hintStyle: theme.textTheme.bodyLarge?.copyWith(color: _muted),
+              ),
+            ),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) => value.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    tooltip: 'Borrar',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close_rounded, color: _muted),
+                    onPressed: () {
+                      controller.clear();
+                      c.setQuery('');
+                    },
+                  ),
+          ),
+          const SizedBox(width: 4),
+          const _ZoneChip(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Zona en la que se busca; al tocarla se elige otra.
+class _ZoneChip extends StatelessWidget {
+  const _ZoneChip();
+
+  static const _ink = Color(0xFF0A6B44);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scope = context.select<StationsController, SearchScope?>((c) => c.scope);
+
+    return Tooltip(
+      message: 'Cambiar zona',
+      child: Material(
+        color: const Color(0xFFE3F3EA),
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () => showScopePicker(context),
+          child: SizedBox(
+            height: 36,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 6, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    scope?.followsLocation ?? false ? Icons.my_location : Icons.place_outlined,
+                    size: 15,
+                    color: _ink,
+                  ),
+                  const SizedBox(width: 4),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 110),
+                    child: Text(
+                      scope?.label ?? 'Elegir zona',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(color: _ink, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const Icon(Icons.expand_more_rounded, size: 18, color: _ink),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HeaderButton extends StatelessWidget {
-  const _HeaderButton({required this.tooltip, required this.icon, required this.onPressed});
+  const _HeaderButton({required this.tooltip, required this.icon, required this.onPressed, this.selected = false});
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -246,13 +334,147 @@ class _HeaderButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.white.withValues(alpha: 0.16),
-        fixedSize: const Size(40, 40),
-        minimumSize: const Size(40, 40),
+        backgroundColor: selected ? Colors.white : Colors.white.withValues(alpha: 0.14),
+        fixedSize: const Size(44, 44),
+        minimumSize: const Size(44, 44),
         padding: EdgeInsets.zero,
       ),
       iconSize: 21,
-      icon: Icon(icon, color: Colors.white),
+      icon: Icon(icon, color: selected ? AppColors.emeraldDeep : Colors.white),
+    );
+  }
+}
+
+/// Barra mínima que aparece al bajar por la lista: zona, combustible y orden,
+/// y accesos al buscador y al mapa.
+class _CollapsedBar extends StatelessWidget {
+  const _CollapsedBar({required this.visible, required this.onSearch, required this.onToggleMap});
+
+  final bool visible;
+  final VoidCallback onSearch;
+  final VoidCallback onToggleMap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.watch<StationsController>();
+    final sort = switch (c.sort) {
+      SortMode.price => 'Más baratas',
+      SortMode.distance => 'Más cercanas',
+      SortMode.value => 'Más rentables',
+    };
+
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0, -1.1),
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: AppColors.headerGradient,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(22)),
+              boxShadow: [BoxShadow(color: Color(0x59000000), blurRadius: 22, offset: Offset(0, 8))],
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
+                child: Row(
+                  children: [
+                    const AppLogo(size: 32),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Tooltip(
+                        message: 'Cambiar zona',
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => showScopePicker(context),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: SizedBox(
+                                height: 44,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            c.scope?.label ?? 'Gasolineras',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.titleMedium?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                              height: 1.2,
+                                            ),
+                                          ),
+                                        ),
+                                        const Icon(Icons.expand_more_rounded, size: 18, color: Colors.white),
+                                      ],
+                                    ),
+                                    Text(
+                                      '${c.fuel.label} · $sort',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: Colors.white.withValues(alpha: 0.9),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    _HeaderButton(tooltip: 'Buscar', icon: Icons.search_rounded, onPressed: onSearch),
+                    const SizedBox(width: 4),
+                    _HeaderButton(tooltip: 'Ver mapa', icon: Icons.map_outlined, onPressed: onToggleMap),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pinta verde por encima de la cabecera para que, al estirar la lista hacia
+/// abajo (rebote de iOS), no asome el fondo por arriba.
+class _OverscrollFill extends StatelessWidget {
+  const _OverscrollFill({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      fit: StackFit.passthrough,
+      children: [
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: -600,
+          height: 640,
+          child: DecoratedBox(
+            decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.emeraldDeep, Color(0xFF0C7356)])),
+          ),
+        ),
+        child,
+      ],
     );
   }
 }
@@ -287,12 +509,7 @@ class AppLogo extends StatelessWidget {
               decoration: const BoxDecoration(color: AppColors.amber, shape: BoxShape.circle),
               child: Text(
                 '€',
-                style: TextStyle(
-                  color: AppColors.ink,
-                  fontSize: size * 0.2,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                ),
+                style: TextStyle(color: AppColors.ink, fontSize: size * 0.2, fontWeight: FontWeight.w800, height: 1),
               ),
             ),
           ),
@@ -302,33 +519,51 @@ class AppLogo extends StatelessWidget {
   }
 }
 
-/// Combustible y orden. Se reutiliza en Favoritas.
+/// Combustibles en una fila desplazable. Con [floating] va sobre el mapa, con
+/// sombra y aire para ella.
+class FuelChipsRow extends StatelessWidget {
+  const FuelChipsRow({super.key, this.floating = false});
+
+  final bool floating;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<StationsController>();
+    return SizedBox(
+      height: floating ? 50 : 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: floating ? 6 : 0),
+        itemCount: FuelType.values.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final fuel = FuelType.values[i];
+          return _FuelChip(
+            label: fuel.label,
+            selected: c.fuel == fuel,
+            floating: floating,
+            onTap: () => c.setFuel(fuel),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Combustible y orden. Se usa en Favoritas.
 class FiltersBar extends StatelessWidget {
   const FiltersBar({super.key});
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<StationsController>();
-    final theme = Theme.of(context);
 
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: FuelType.values.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                final fuel = FuelType.values[i];
-                return _FuelChip(label: fuel.label, selected: c.fuel == fuel, onTap: () => c.setFuel(fuel));
-              },
-            ),
-          ),
+          const FuelChipsRow(),
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -358,35 +593,47 @@ class FiltersBar extends StatelessWidget {
               onSelectionChanged: (s) => c.setSort(s.first),
             ),
           ),
-          if (c.sort != SortMode.price && c.position == null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: Text(
-                c.sort == SortMode.distance
-                    ? 'Activa la ubicación para ordenar por cercanía.'
-                    : 'Activa la ubicación para calcular el coste del viaje.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
-              ),
-            ),
-          if (c.sort == SortMode.value && c.position != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: Text(
-                'Ordenadas por lo que te cuesta llenar el depósito, incluido el viaje de ida y vuelta.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _sortHints(context, c)),
+          ),
         ],
       ),
     );
   }
 }
 
+/// Avisos bajo el selector de orden: falta la ubicación, o qué es "Rentables".
+List<Widget> _sortHints(BuildContext context, StationsController c) {
+  final theme = Theme.of(context);
+  return [
+    if (c.sort != SortMode.price && c.position == null)
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+        child: Text(
+          c.sort == SortMode.distance
+              ? 'Activa la ubicación para ordenar por cercanía.'
+              : 'Activa la ubicación para calcular el coste del viaje.',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+        ),
+      ),
+    if (c.sort == SortMode.value && c.position != null)
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+        child: Text(
+          'Ordenadas por lo que te cuesta llenar el depósito, incluido el viaje de ida y vuelta.',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ),
+  ];
+}
+
 class _FuelChip extends StatelessWidget {
-  const _FuelChip({required this.label, required this.selected, required this.onTap});
+  const _FuelChip({required this.label, required this.selected, required this.onTap, this.floating = false});
 
   final String label;
   final bool selected;
+  final bool floating;
   final VoidCallback onTap;
 
   @override
@@ -395,6 +642,8 @@ class _FuelChip extends StatelessWidget {
     final scheme = theme.colorScheme;
     return Material(
       color: selected ? scheme.primary : scheme.surface,
+      elevation: floating ? 3 : 0,
+      shadowColor: Colors.black54,
       shape: StadiumBorder(side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant)),
       child: InkWell(
         customBorder: const StadiumBorder(),
@@ -417,36 +666,170 @@ class _FuelChip extends StatelessWidget {
   }
 }
 
-class _MapView extends StatelessWidget {
-  const _MapView();
+/// Selector compacto del orden de la lista, junto al número de resultados.
+class _SortToggle extends StatelessWidget {
+  const _SortToggle({this.expand = false});
+
+  /// Ocupa todo el ancho, con las opciones repartidas.
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<StationsController>();
-    final status = _statusView(context, c);
-    if (status != null) return status;
+    final scheme = Theme.of(context).colorScheme;
+    final options = <(SortMode, IconData, String)>[
+      (SortMode.price, Icons.sell_outlined, 'Baratas'),
+      (SortMode.distance, Icons.near_me_outlined, 'Cerca'),
+      if (c.car != null) (SortMode.value, Icons.auto_graph_rounded, 'Rentables'),
+    ];
 
-    final pos = c.position;
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: StationsMap(
-        // Al cambiar de zona o combustible se vuelve a encuadrar el mapa.
-        key: ValueKey('${c.scope!.cacheKey}-${c.scope!.townId}-${c.fuel.name}-${c.query}'),
-        entries: c.entries,
-        userLocation: pos == null ? null : LatLng(pos.latitude, pos.longitude),
-        sort: c.sort,
+    return Semantics(
+      container: true,
+      label: 'Ordenar',
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.all(3),
+        decoration: ShapeDecoration(
+          color: scheme.surface,
+          shape: StadiumBorder(side: BorderSide(color: scheme.outlineVariant)),
+        ),
+        child: Row(
+          mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (mode, icon, label) in options)
+              if (expand)
+                Expanded(
+                  child: _SortOption(
+                    icon: icon,
+                    label: label,
+                    selected: c.sort == mode,
+                    expand: true,
+                    onTap: () => c.setSort(mode),
+                  ),
+                )
+              else
+                _SortOption(icon: icon, label: label, selected: c.sort == mode, onTap: () => c.setSort(mode)),
+          ],
+        ),
       ),
     );
   }
 }
 
+class _SortOption extends StatelessWidget {
+  const _SortOption({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.expand = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool expand;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    final text = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w700),
+    );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? scheme.primaryContainer : Colors.transparent,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 6),
+                if (expand) Flexible(child: text) else text,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Mapa hasta el borde de la pantalla, por debajo de la cabecera y de los
+/// combustibles, que flotan encima.
+class _MapView extends StatelessWidget {
+  const _MapView({required this.header});
+
+  final Widget header;
+
+  /// Parte del mapa que queda bajo las esquinas redondeadas de la cabecera.
+  static const _underHeader = 26.0;
+
+  /// Alto de la fila de combustibles sobre el mapa (con aire para la sombra).
+  static const _chipsHeight = 50.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<StationsController>();
+    final status = _statusView(context, c);
+    final headerHeight = _Header.heightOf(context, refreshing: c.loading && c.snapshot != null);
+    const covered = _underHeader + 4 + _chipsHeight;
+    final pos = c.position;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          top: headerHeight - _underHeader,
+          child: status != null
+              ? SingleChildScrollView(
+                  padding: EdgeInsets.only(top: covered, bottom: MediaQuery.paddingOf(context).bottom),
+                  child: status,
+                )
+              : StationsMap(
+                  // Al cambiar de zona o combustible se vuelve a encuadrar el mapa.
+                  key: ValueKey('${c.scope!.cacheKey}-${c.scope!.townId}-${c.fuel.name}-${c.query}'),
+                  entries: c.entries,
+                  userLocation: pos == null ? null : LatLng(pos.latitude, pos.longitude),
+                  sort: c.sort,
+                  topInset: covered,
+                ),
+        ),
+        Positioned(top: 0, left: 0, right: 0, child: header),
+        Positioned(top: headerHeight + 4, left: 0, right: 0, child: const FuelChipsRow(floating: true)),
+      ],
+    );
+  }
+}
+
 /// Mensaje para los estados sin datos (sin zona, descargando, error, sin
-/// resultados) o `null` si hay gasolineras que mostrar.
+/// resultados) o `null` si hay gasolineras que mostrar. No desplaza por sí
+/// mismo: va dentro de la lista (o del hueco del mapa).
 Widget? _statusView(BuildContext context, StationsController c) {
   if (c.scope == null) {
     // Sin zona todavía, pero ya se puede buscar un pueblo o CP directamente.
     final places = c.placeSuggestions;
-    if (places.isNotEmpty) return ListView(children: [_PlaceSuggestions(places: places)]);
+    if (places.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: _PlaceSuggestions(places: places),
+      );
+    }
     if (c.locating) {
       return const _Message(
         icon: Icons.my_location,
@@ -493,11 +876,12 @@ Widget? _statusView(BuildContext context, StationsController c) {
   if (entries.isEmpty) {
     final places = c.placeSuggestions;
     if (places.isNotEmpty) {
-      return ListView(
-        padding: const EdgeInsets.only(top: 4),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
             child: Text(
               'No hay resultados para "${c.query}" en ${c.scope!.label}. ¿Buscabas alguno de estos?',
               style: Theme.of(context).textTheme.bodyMedium,
@@ -520,10 +904,7 @@ Widget? _statusView(BuildContext context, StationsController c) {
       title: inTown ? 'Sin ${c.fuel.label} en ${c.scope!.name}' : 'Sin ${c.fuel.label} en esta zona',
       text: 'Ninguna gasolinera de aquí vende este combustible.',
       action: inTown
-          ? FilledButton(
-              onPressed: c.useMyProvince,
-              child: Text('Ver toda la provincia de ${c.myProvinceName}'),
-            )
+          ? FilledButton(onPressed: c.useMyProvince, child: Text('Ver toda la provincia de ${c.myProvinceName}'))
           : null,
     );
   }
@@ -565,15 +946,50 @@ class _PlaceSuggestions extends StatelessWidget {
   }
 }
 
+/// La lista entera se desplaza, cabecera incluida, y llega hasta el borde de
+/// abajo (por detrás de la barra de Safari o del indicador de inicio).
 class _StationList extends StatelessWidget {
-  const _StationList();
+  const _StationList({required this.controller, required this.header});
+
+  final ScrollController controller;
+  final Widget header;
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<StationsController>();
     final status = _statusView(context, c);
-    if (status != null) return status;
+    final bottom = MediaQuery.paddingOf(context).bottom;
 
+    return RefreshIndicator(
+      onRefresh: c.refresh,
+      edgeOffset: MediaQuery.paddingOf(context).top,
+      child: CustomScrollView(
+        controller: controller,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(child: _OverscrollFill(child: header)),
+          const SliverToBoxAdapter(
+            child: Padding(padding: EdgeInsets.only(top: 14, bottom: 2), child: FuelChipsRow()),
+          ),
+          if (status != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottom),
+                child: Center(child: status),
+              ),
+            )
+          else ...[
+            ..._results(context, c),
+            // Margen final: que la última no quede bajo la barra de Safari o el indicador de inicio.
+            SliverToBoxAdapter(child: SizedBox(height: 24 + bottom)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _results(BuildContext context, StationsController c) {
     final theme = Theme.of(context);
     final snapshot = c.snapshot!;
     final entries = c.entries;
@@ -585,58 +1001,39 @@ class _StationList extends StatelessWidget {
     final places = c.placeSuggestions;
     final garage = context.watch<GarageController>();
 
-    final header = <Widget>[
-      if (places.isNotEmpty) ...[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-          child: Text(
-            'En otras zonas',
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-        ),
-        _PlaceSuggestions(places: places),
-      ],
-      if (garage.loaded && garage.car == null)
-        const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12), child: _CarPrompt()),
-      if (entries.length > 1)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-          child: _BestDealCard(
-            entry: cheapest,
-            average: average,
-            fuel: c.fuel,
-            car: garage.car,
-            worthIt: garage.car == null ? null : compareCheapestWithNearest(entries, garage.car!),
-          ),
-        ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-        child: Row(
+    return [
+      SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '${entries.length} gasolineras',
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const Spacer(),
-            if (snapshot.publishedAt != null)
-              Text(
-                'Precios de ${formatPublished(snapshot.publishedAt!)}',
-                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            if (places.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text('En otras zonas', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
               ),
+              _PlaceSuggestions(places: places),
+            ],
+            if (entries.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                child: _BestDealCard(
+                  entry: cheapest,
+                  average: average,
+                  fuel: c.fuel,
+                  car: garage.car,
+                  worthIt: garage.car == null ? null : compareCheapestWithNearest(entries, garage.car!),
+                ),
+              ),
+            if (garage.loaded && garage.car == null)
+              const Padding(padding: EdgeInsets.fromLTRB(16, 10, 16, 0), child: _CarPrompt()),
+            _ListHeader(count: entries.length, publishedAt: snapshot.publishedAt),
           ],
         ),
       ),
-    ];
-
-    return RefreshIndicator(
-      onRefresh: c.refresh,
-      child: ListView.builder(
-        // Margen final: que la última no quede bajo la barra de Safari o el indicador de inicio.
-        padding: EdgeInsets.only(top: 4, bottom: 24 + MediaQuery.paddingOf(context).bottom),
-        itemCount: header.length + entries.length,
+      SliverList.builder(
+        itemCount: entries.length,
         itemBuilder: (context, i) {
-          if (i < header.length) return header[i];
-          final e = entries[i - header.length];
+          final e = entries[i];
           return StationTile(
             station: e.station,
             fuel: c.fuel,
@@ -646,6 +1043,63 @@ class _StationList extends StatelessWidget {
             maxPrice: maxPrice,
           );
         },
+      ),
+    ];
+  }
+}
+
+/// Número de resultados, hora de los precios y orden de la lista.
+class _ListHeader extends StatelessWidget {
+  const _ListHeader({required this.count, required this.publishedAt});
+
+  final int count;
+  final DateTime? publishedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.watch<StationsController>();
+    final published = publishedAt;
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$count gasolineras', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        if (published != null)
+          Text(
+            'Precios de ${formatPublished(published)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Con dos opciones cabe al lado del número; con "Rentables", debajo.
+              if (c.car == null && constraints.maxWidth >= 330) {
+                return Row(
+                  children: [
+                    Expanded(child: info),
+                    const SizedBox(width: 12),
+                    const _SortToggle(),
+                  ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [info, const SizedBox(height: 10), const _SortToggle(expand: true)],
+              );
+            },
+          ),
+          ..._sortHints(context, c),
+        ],
       ),
     );
   }
@@ -671,172 +1125,141 @@ class _BestDealCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final Station s = entry.station;
     final tankLiters = car?.tankLiters ?? _defaultTankLiters;
     final saving = (average - entry.price) * tankLiters;
     final litersText = formatLiters(tankLiters).replaceAll(',0 L', ' L');
+    // Ámbar legible sobre blanco en modo claro.
+    final priceColor = dark ? AppColors.amber : const Color(0xFFB86E00);
+    final badgeColor = dark ? const Color(0xFFF5B841) : const Color(0xFFA35F00);
+    final distance = entry.distanceKm;
 
-    return Material(
-      color: AppColors.ink,
-      borderRadius: BorderRadius.circular(22),
+    return Card(
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
       child: InkWell(
         onTap: () => showStationDetails(context, s, entry.distanceKm, fuel: fuel),
-        child: Stack(
-          children: [
-            // Destello decorativo en la esquina.
-            Positioned(
-              right: -40,
-              top: -40,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [AppColors.amber.withValues(alpha: 0.35), AppColors.amber.withValues(alpha: 0)],
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.amber,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.emoji_events_rounded, size: 14, color: AppColors.ink),
-                            const SizedBox(width: 4),
-                            Text(
-                              'LA MÁS BARATA',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: AppColors.ink,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      if (entry.distanceKm != null)
-                        InfoPill(
-                          icon: Icons.near_me,
-                          text: formatDistance(entry.distanceKm!),
-                          color: Colors.white70,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      BrandBadge(brand: s.brand, size: 48),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.brand.isEmpty ? 'Sin marca' : s.brand,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            Text(
-                              '${s.address} · ${s.municipality.split('/').first}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            formatPriceNumber(entry.price),
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: AppColors.amber,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -1,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                          Text(
-                            '€/L · ${fuel.label}',
-                            style: theme.textTheme.labelSmall?.copyWith(color: Colors.white60),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
+                  BrandBadge(brand: s.brand, size: 48),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.savings_rounded, color: Color(0xFF3DD68C), size: 22),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text.rich(
-                            saving >= 0.5
-                                ? TextSpan(
-                                    children: [
-                                      TextSpan(text: 'Llenando $litersText aquí ahorras '),
-                                      TextSpan(
-                                        text: formatEuros(saving),
-                                        style: const TextStyle(
-                                          color: Color(0xFF3DD68C),
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      TextSpan(text: ' frente a la media (${formatPrice(average)}/L)'),
-                                    ],
-                                  )
-                                : const TextSpan(text: 'Los precios de la zona son muy parecidos.'),
-                            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white),
-                          ),
+                        Row(
+                          children: [
+                            Icon(Icons.emoji_events_rounded, size: 14, color: badgeColor),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                'LA MÁS BARATA',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: badgeColor,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            if (distance != null)
+                              Flexible(
+                                child: Text(
+                                  ' · ${formatDistance(distance)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          s.brand.isEmpty ? 'Sin marca' : s.brand,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          '${s.address} · ${s.municipality.split('/').first}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                         ),
                       ],
                     ),
                   ),
-                  if (worthIt != null) ...[const SizedBox(height: 8), _WorthItBox(result: worthIt!)],
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.amber,
-                        foregroundColor: AppColors.ink,
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatPriceNumber(entry.price),
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          color: priceColor,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                      icon: const Icon(Icons.directions_rounded),
-                      label: const Text('Llévame'),
-                      onPressed: () => openDirections(s),
-                    ),
+                      Text('€/L', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                    ],
                   ),
                 ],
               ),
-            ),
-          ],
+              if (worthIt != null) ...[const SizedBox(height: 12), _WorthItBox(result: worthIt!)],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Icon(Icons.trending_down_rounded, size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text.rich(
+                      saving >= 0.5
+                          ? TextSpan(
+                              children: [
+                                const TextSpan(text: 'Ahorras '),
+                                TextSpan(
+                                  text: formatEuros(saving),
+                                  style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800),
+                                ),
+                                TextSpan(text: ' llenando $litersText frente a la media (${formatPrice(average)}/L)'),
+                              ],
+                            )
+                          : const TextSpan(text: 'Los precios de la zona son muy parecidos.'),
+                      style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.amber,
+                      foregroundColor: AppColors.ink,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    icon: const Icon(Icons.directions_rounded, size: 20),
+                    label: const Text('Llévame'),
+                    onPressed: () => openDirections(s),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -853,15 +1276,16 @@ class _WorthItBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final ok = result.worthIt;
-    final accent = ok ? const Color(0xFF3DD68C) : const Color(0xFFFF8A80);
+    final accent = ok ? scheme.primary : (dark ? const Color(0xFFFF8A80) : const Color(0xFFC23B3B));
     final nearest = result.nearest;
-    final style = theme.textTheme.bodySmall?.copyWith(color: Colors.white70);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: scheme.onSurface.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: accent.withValues(alpha: 0.5)),
       ),
@@ -870,21 +1294,14 @@ class _WorthItBox extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                ok ? Icons.thumb_up_alt_rounded : Icons.do_not_disturb_on_outlined,
-                size: 18,
-                color: accent,
-              ),
+              Icon(ok ? Icons.thumb_up_alt_rounded : Icons.do_not_disturb_on_outlined, size: 18, color: accent),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   ok
                       ? '¿Merece la pena ir? Sí: ahorras ${formatEuros(result.netSaving)}'
                       : '¿Merece la pena ir? No, mejor la más cercana',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
             ],
@@ -895,7 +1312,7 @@ class _WorthItBox extends StatelessWidget {
             '(a ${formatDistance(nearest.distanceKm!)}, ${formatPrice(nearest.price)}/L): '
             '${formatEuros(result.fuelSaving)} menos en combustible, '
             '${formatEuros(result.extraTripCost)} más de viaje (ida y vuelta).',
-            style: style,
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -911,34 +1328,36 @@ class _CarPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Card(
+    return Material(
       color: scheme.primaryContainer,
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.primary.withValues(alpha: 0.25)),
+      ),
       child: InkWell(
         onTap: () => showCarForm(context),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Icon(Icons.directions_car_filled_rounded, color: scheme.primary, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Configura tu coche',
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+            child: Row(
+              children: [
+                Icon(Icons.directions_car_filled_rounded, color: scheme.primary, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Configura tu coche y te decimos si compensa el viaje',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
                     ),
-                    Text(
-                      'Y te diremos si compensa ir a la más barata, contando el viaje.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: scheme.primary),
-            ],
+                Icon(Icons.chevron_right_rounded, color: scheme.primary),
+              ],
+            ),
           ),
         ),
       ),
@@ -947,14 +1366,7 @@ class _CarPrompt extends StatelessWidget {
 }
 
 class _Message extends StatelessWidget {
-  const _Message({
-    required this.icon,
-    required this.title,
-    this.text,
-    this.busy = false,
-    this.action,
-    this.secondary,
-  });
+  const _Message({required this.icon, required this.title, this.text, this.busy = false, this.action, this.secondary});
 
   final IconData icon;
   final String title;
@@ -967,47 +1379,45 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(color: scheme.primaryContainer, shape: BoxShape.circle),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(icon, size: 42, color: scheme.primary),
-                  if (busy)
-                    SizedBox(
-                      width: 96,
-                      height: 96,
-                      child: CircularProgressIndicator(strokeWidth: 3, color: scheme.primary),
-                    ),
-                ],
-              ),
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(color: scheme.primaryContainer, shape: BoxShape.circle),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(icon, size: 42, color: scheme.primary),
+                if (busy)
+                  SizedBox(
+                    width: 96,
+                    height: 96,
+                    child: CircularProgressIndicator(strokeWidth: 3, color: scheme.primary),
+                  ),
+              ],
             ),
-            const SizedBox(height: 20),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          if (text != null) ...[
+            const SizedBox(height: 6),
             Text(
-              title,
+              text!,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
-            if (text != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                text!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
-            if (action != null) ...[const SizedBox(height: 20), action!],
-            ?secondary,
           ],
-        ),
+          if (action != null) ...[const SizedBox(height: 20), action!],
+          ?secondary,
+        ],
       ),
     );
   }

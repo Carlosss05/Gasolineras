@@ -16,11 +16,21 @@ import 'widgets/station_tile.dart';
 /// pintan las [maxMarkers] primeras que caen dentro de la zona visible; como
 /// [entries] viene ordenada, son las más baratas (o las más cercanas).
 class StationsMap extends StatefulWidget {
-  const StationsMap({super.key, required this.entries, required this.userLocation, required this.sort});
+  const StationsMap({
+    super.key,
+    required this.entries,
+    required this.userLocation,
+    required this.sort,
+    this.topInset = 0,
+  });
 
   final List<StationEntry> entries;
   final LatLng? userLocation;
   final SortMode sort;
+
+  /// Alto de la parte de arriba del mapa tapada por la cabecera y los filtros
+  /// (el mapa va por debajo de ellos hasta el borde de la pantalla).
+  final double topInset;
 
   static const maxMarkers = 150;
 
@@ -53,7 +63,7 @@ class _StationsMapState extends State<StationsMap> {
     if (points.length == 1) return CameraFit.coordinates(coordinates: points, maxZoom: 15);
     return CameraFit.bounds(
       bounds: LatLngBounds.fromPoints(points),
-      padding: const EdgeInsets.fromLTRB(32, 56, 32, 32),
+      padding: EdgeInsets.fromLTRB(32, widget.topInset + 32, 32, 32 + MediaQuery.paddingOf(context).bottom),
       maxZoom: 15,
     );
   }
@@ -109,9 +119,7 @@ class _StationsMapState extends State<StationsMap> {
             initialZoom: 6,
             minZoom: 4,
             maxZoom: 18,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-            ),
+            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
             onPositionChanged: _onCameraChanged,
             onMapReady: () => setState(() {
               _visible = _controller.camera.visibleBounds;
@@ -130,7 +138,7 @@ class _StationsMapState extends State<StationsMap> {
                   Marker(
                     point: _point(e),
                     width: 92,
-                    height: 34,
+                    height: 36,
                     alignment: Alignment.topCenter,
                     child: _PriceMarker(
                       brand: e.station.brand,
@@ -160,7 +168,7 @@ class _StationsMapState extends State<StationsMap> {
         ),
         if (truncated)
           Positioned(
-            top: 12,
+            top: widget.topInset + 8,
             left: 16,
             right: 16,
             child: Center(
@@ -242,30 +250,34 @@ class _PriceMarker extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(3, 3, 6, 3),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white, width: isBest ? 2.5 : 1.5),
-              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1))],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                BrandBadge(brand: brand, size: 18),
-                const SizedBox(width: 4),
-                if (isBest) const Icon(Icons.emoji_events, size: 12, color: Colors.white),
-                Text(
-                  formatPrice(price).replaceAll(' €', ''),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    fontFeatures: [FontFeature.tabularFigures()],
+          // Si el precio no cabe (letra grande), se encoge en vez de desbordar.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(3, 3, 6, 3),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white, width: isBest ? 2.5 : 1.5),
+                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1))],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  BrandBadge(brand: brand, size: 18),
+                  const SizedBox(width: 4),
+                  if (isBest) const Icon(Icons.emoji_events, size: 12, color: Colors.white),
+                  Text(
+                    formatPrice(price).replaceAll(' €', ''),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           CustomPaint(size: const Size(10, 6), painter: _ArrowPainter(color)),

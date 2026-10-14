@@ -6,6 +6,10 @@ import 'package:google_fonts/google_fonts.dart';
 abstract final class AppColors {
   static const emerald = Color(0xFF0B8F5A);
   static const emeraldDark = Color(0xFF06603D);
+
+  /// Verde un poco más oscuro para fondos con texto blanco encima (cabecera,
+  /// botones): con el esmeralda el texto pequeño no llegaba al contraste 4,5:1.
+  static const emeraldDeep = Color(0xFF0A7A4D);
   static const teal = Color(0xFF0F766E);
   static const amber = Color(0xFFF5A524);
   static const ink = Color(0xFF13221C);
@@ -18,14 +22,14 @@ abstract final class AppColors {
   static const headerGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF0B8F5A), Color(0xFF0F766E)],
+    colors: [emeraldDeep, Color(0xFF0F6B63)],
   );
 }
 
 ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(seedColor: AppColors.emerald, brightness: brightness).copyWith(
-    primary: dark ? const Color(0xFF3DD68C) : AppColors.emerald,
+    primary: dark ? const Color(0xFF3DD68C) : AppColors.emeraldDeep,
     secondary: AppColors.amber,
     surface: dark ? const Color(0xFF16201B) : Colors.white,
     surfaceContainerLowest: dark ? const Color(0xFF0E1512) : const Color(0xFFF2F6F3),

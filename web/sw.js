@@ -9,7 +9,7 @@
 //   respuesta guardada (la app muestra la fecha de publicación de esos precios).
 // - Teselas del mapa: caché primero, con un máximo de entradas.
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const APP = `app-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 const PRICES = `prices-${VERSION}`;
