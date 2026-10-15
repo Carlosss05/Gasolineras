@@ -2,9 +2,13 @@
 
 Cada versión de Android se publica en [Releases](https://github.com/Carlosss05/Gasolineras/releases) y la web en [carlosss05.github.io/Gasolineras](https://carlosss05.github.io/Gasolineras/).
 
-## Próxima versión
+## 1.3.0 — octubre de 2026
 
-- **¿Sube o baja?** Cuánto ha cambiado el precio medio de tu zona desde ayer y en 7 días, y el cambio de cada gasolinera bajo su precio y en su ficha.
+**¿Sube o baja?**
+- Junto al número de gasolineras, cuánto ha subido o bajado el precio medio de tu zona desde ayer y en 7 días, y cuántas gasolineras han bajado o subido.
+- Cada gasolinera muestra bajo su precio su cambio (en verde si baja, en rojo si sube). Toca "Media desde ayer" o "Media en 7 días" para elegir con qué día se compara.
+- En la ficha de cada gasolinera, su precio de ayer y el de hace 7 días.
+- Usa el histórico oficial del Ministerio, solo de tu zona y del combustible elegido, en segundo plano. No está disponible con "Toda España".
 
 ## 1.2.0 — octubre de 2026
 
