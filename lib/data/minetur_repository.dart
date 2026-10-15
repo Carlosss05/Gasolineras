@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/fuel_type.dart';
+import '../models/price_history.dart';
 import '../models/region.dart';
 import '../models/station.dart';
 import '../utils/text.dart';
@@ -21,6 +23,10 @@ class MineturRepository implements FuelPriceRepository {
 
   final _cache = <String, PriceSnapshot>{};
   final _inFlight = <String, Future<PriceSnapshot>>{};
+
+  /// Históricos ya pedidos (o en curso), del más antiguo al más reciente.
+  final _history = <String, Future<PriceHistory>>{};
+  static const _maxHistory = 24;
   Future<List<Province>>? _provinces;
   Future<List<Community>>? _communities;
   Future<List<Municipality>>? _municipalities;
@@ -28,9 +34,7 @@ class MineturRepository implements FuelPriceRepository {
   @override
   Future<List<Municipality>> municipalities() => _municipalities ??=
       // ~1 MB de JSON: se descarga solo la primera vez que se busca algo.
-      _get('$_base/Listados/Municipios/').then((bytes) => compute(parseMunicipalities, bytes)).catchError((
-        Object e,
-      ) {
+      _get('$_base/Listados/Municipios/').then((bytes) => compute(parseMunicipalities, bytes)).catchError((Object e) {
         _municipalities = null;
         throw e;
       });
@@ -107,6 +111,30 @@ class MineturRepository implements FuelPriceRepository {
     }
   }
 
+  /// Los precios de un día pasado no cambian: cada uno se descarga una sola vez
+  /// por sesión (y en la web el service worker los guarda entre sesiones).
+  @override
+  Future<PriceHistory> history(SearchScope scope, FuelType fuel, DateTime day) {
+    final url = historyUrl(scope, fuel, day);
+    if (url == null) return Future.error(FuelApiException('No hay histórico para toda España.'));
+    final cached = _history.remove(url);
+    if (cached != null) return _history[url] = cached;
+
+    final future = _get(url)
+        .then((bytes) => compute(parseHistory, bytes))
+        .then((prices) => PriceHistory(day: DateTime(day.year, day.month, day.day), prices: prices))
+        .catchError((Object e) {
+          // Puede que ese día aún no esté publicado: se volverá a pedir.
+          _history.remove(url);
+          throw e;
+        });
+    _history[url] = future;
+    while (_history.length > _maxHistory) {
+      _history.remove(_history.keys.first);
+    }
+    return future;
+  }
+
   static const _invalidData = 'El servicio de precios ha devuelto datos no válidos. Inténtalo más tarde.';
 
   Future<Object?> _getJson(String url) async {
@@ -140,6 +168,41 @@ PriceSnapshot parseSnapshot(Uint8List bytes) {
     stations: raw.map(Station.fromApi).whereType<Station>().toList(growable: false),
     publishedAt: _parseDate(json['Fecha'] as String?),
   );
+}
+
+/// URL del histórico de [fuel] el día [day], con el filtro más pequeño que
+/// cubre [scope]: un pueblo son ~2 KB y una provincia ~200 KB. `null` para
+/// toda España (~4 MB por día).
+String? historyUrl(SearchScope scope, FuelType fuel, DateTime day) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final date = '${two(day.day)}-${two(day.month)}-${day.year}';
+  final enc = Uri.encodeComponent;
+  final town = scope.townId;
+  final filter = switch (scope.kind) {
+    ScopeKind.spain => null,
+    ScopeKind.community => 'FiltroCCAAProducto/$date/${enc(scope.id)}',
+    ScopeKind.myTown when town != null => 'FiltroMunicipioProducto/$date/${enc(town)}',
+    ScopeKind.myTown || ScopeKind.myProvince || ScopeKind.province => 'FiltroProvinciaProducto/$date/${enc(scope.id)}',
+  };
+  if (filter == null) return null;
+  return '${MineturRepository._base}/EstacionesTerrestresHist/$filter/${enc(fuel.productId)}';
+}
+
+/// Convierte la respuesta del histórico en precio por gasolinera. Como el
+/// resto de la API, se trata como no fiable: ids cortos y precios en rango.
+Map<String, double> parseHistory(Uint8List bytes) {
+  final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+  final prices = <String, double>{};
+  for (final item in json['ListaEESSPrecio'] as List? ?? const []) {
+    if (item is! Map<String, dynamic>) continue;
+    final id = item['IDEESS'];
+    final price = parseApiNumber(item['PrecioProducto']);
+    if (id is! String || price == null) continue;
+    final key = id.trim();
+    if (key.isEmpty || key.length > 20 || price <= 0 || price >= Station.maxPrice) continue;
+    prices[key] = price;
+  }
+  return prices;
 }
 
 List<Municipality> parseMunicipalities(Uint8List bytes) {

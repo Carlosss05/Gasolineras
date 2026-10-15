@@ -52,3 +52,19 @@ Color priceColor(double price, double min, double max) {
 
 /// Si el horario indica apertura las 24 horas ("L-D: 24H").
 bool isOpen24h(String schedule) => schedule.toUpperCase().contains('24H');
+
+final _cents = NumberFormat('0.0', 'es');
+
+/// Diferencia de precio por litro en céntimos, sin signo: 0.012 -> "1,2 cts".
+String formatCents(double eurosPerLiter) => '${_cents.format((eurosPerLiter * 100).abs())} cts';
+
+/// Días de calendario de [from] a [to] (sin contar horas ni cambios de hora).
+int daysBetween(DateTime from, DateTime to) =>
+    DateTime.utc(to.year, to.month, to.day).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
+
+/// "Ayer", "Anteayer" o "Hace 7 días", según los días que van de [day] a [today].
+String daysAgoLabel(DateTime day, DateTime today) => switch (daysBetween(day, today)) {
+  1 => 'Ayer',
+  2 => 'Anteayer',
+  final days => 'Hace $days días',
+};

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../logic/price_trend.dart';
 import '../logic/savings.dart';
 import '../models/car.dart';
 import '../platform/web_diagnostics.dart';
@@ -18,6 +19,7 @@ import 'scope_picker.dart';
 import 'stations_map.dart';
 import 'theme.dart';
 import 'widgets/brand_badge.dart';
+import 'widgets/price_change.dart';
 import 'widgets/station_tile.dart';
 
 /// Litros de referencia si el usuario no ha configurado su coche.
@@ -1022,6 +1024,7 @@ class _StationList extends StatelessWidget {
                   fuel: c.fuel,
                   car: garage.car,
                   worthIt: garage.car == null ? null : compareCheapestWithNearest(entries, garage.car!),
+                  change: c.priceChange(cheapest.station.id, cheapest.price),
                 ),
               ),
             if (garage.loaded && garage.car == null)
@@ -1041,6 +1044,7 @@ class _StationList extends StatelessWidget {
             distanceKm: e.distanceKm,
             minPrice: minPrice,
             maxPrice: maxPrice,
+            change: c.priceChange(e.station.id, e.price),
           );
         },
       ),
@@ -1099,7 +1103,123 @@ class _ListHeader extends StatelessWidget {
             },
           ),
           ..._sortHints(context, c),
+          if (c.hasTrend) ...[const SizedBox(height: 12), const _TrendStrip()],
         ],
+      ),
+    );
+  }
+}
+
+/// Cuánto ha cambiado el precio medio de la lista desde ayer y en una semana.
+/// La opción elegida decide con qué día se compara cada gasolinera.
+class _TrendStrip extends StatelessWidget {
+  const _TrendStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.watch<StationsController>();
+    final selected = c.zoneTrendFor(c.trendPeriod);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            for (final (i, period) in TrendPeriod.values.indexed) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: _TrendOption(
+                  period: period,
+                  trend: c.zoneTrendFor(period),
+                  loading: c.trendLoading,
+                  selected: c.trendPeriod == period,
+                  onTap: () => c.setTrendPeriod(period),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (selected != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'De ${selected.compared} gasolineras, ${selected.down} han bajado y ${selected.up} han subido. '
+            'Cada una muestra su cambio bajo el precio.',
+            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TrendOption extends StatelessWidget {
+  const _TrendOption({
+    required this.period,
+    required this.trend,
+    required this.loading,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TrendPeriod period;
+  final ZoneTrend? trend;
+  final bool loading;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final c = context.read<StationsController>();
+    final t = trend;
+    // Si ayer aún no estaba publicado se compara con anteayer: se dice cuál.
+    final label = switch (t == null ? period.days : daysBetween(t.since, c.pricesDay)) {
+      1 => 'Media desde ayer',
+      2 => 'Media desde anteayer',
+      final days => 'Media en $days días',
+    };
+    final Widget value = t != null
+        ? PriceChange(change: t.change, showUnchanged: true, style: theme.textTheme.titleSmall)
+        : Text(
+            loading ? 'Comparando…' : 'Sin datos',
+            style: theme.textTheme.titleSmall?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+          );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? scheme.primaryContainer : scheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: selected ? scheme.primary.withValues(alpha: 0.6) : scheme.outlineVariant),
+        ),
+        child: InkWell(
+          customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          onTap: t == null ? null : onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 52),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 2),
+                  value,
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1114,6 +1234,7 @@ class _BestDealCard extends StatelessWidget {
     required this.fuel,
     required this.car,
     required this.worthIt,
+    this.change,
   });
 
   final StationEntry entry;
@@ -1121,6 +1242,9 @@ class _BestDealCard extends StatelessWidget {
   final FuelType fuel;
   final CarProfile? car;
   final WorthIt? worthIt;
+
+  /// Cuánto ha cambiado su precio (€/L), si se conoce.
+  final double? change;
 
   @override
   Widget build(BuildContext context) {
@@ -1217,6 +1341,7 @@ class _BestDealCard extends StatelessWidget {
                         ),
                       ),
                       Text('€/L', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                      if (change case final c?) PriceChange(change: c),
                     ],
                   ),
                 ],

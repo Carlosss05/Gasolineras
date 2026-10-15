@@ -82,18 +82,21 @@ class Station {
     );
   }
 
-  /// La API usa coma decimal ("1,949") y cadenas vacías para "sin dato".
-  static double? _number(Object? v) {
-    if (v is! String || v.isEmpty || v.length > 20) return null;
-    final n = double.tryParse(v.replaceAll(',', '.'));
-    return n != null && n.isFinite ? n : null;
-  }
+  static double? _number(Object? v) => parseApiNumber(v);
 
   static String _text(Object? v) {
     if (v is! String) return v is num ? '$v' : '';
     final t = v.trim();
     return t.length > maxTextLength ? t.substring(0, maxTextLength) : t;
   }
+}
+
+/// Número de la API, que usa coma decimal ("1,949") y cadenas vacías para
+/// "sin dato".
+double? parseApiNumber(Object? v) {
+  if (v is! String || v.isEmpty || v.length > 20) return null;
+  final n = double.tryParse(v.replaceAll(',', '.'));
+  return n != null && n.isFinite ? n : null;
 }
 
 /// Resultado de una consulta: estaciones y momento en que el Ministerio

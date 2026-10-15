@@ -6,9 +6,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/fuel_price_repository.dart';
+import '../logic/price_trend.dart';
 import '../logic/savings.dart';
 import '../models/car.dart';
 import '../models/fuel_type.dart';
+import '../models/price_history.dart';
 import '../models/region.dart';
 import '../models/station.dart';
 import '../services/location_service.dart';
@@ -44,9 +46,7 @@ List<StationEntry> buildEntries(
     if (price == null) continue;
     if (municipalityId != null && s.municipalityId != municipalityId) continue;
     if (q.isNotEmpty && !s.searchText.contains(q)) continue;
-    final d = position == null
-        ? null
-        : LocationService.distanceKm(position.lat, position.lng, s.latitude, s.longitude);
+    final d = position == null ? null : LocationService.distanceKm(position.lat, position.lng, s.latitude, s.longitude);
     list.add(StationEntry(s, price, d));
   }
 
@@ -141,9 +141,7 @@ List<PlaceSuggestion> findPlaces(
     final id = provinceFromPostalCode(q);
     final province = provinces.where((p) => p.id == id).firstOrNull;
     if (province == null || !outside(province.id, province.communityId)) return const [];
-    return [
-      PlaceSuggestion('Código postal $q', province.name, SearchScope.province(province.id, province.name)),
-    ];
+    return [PlaceSuggestion('Código postal $q', province.name, SearchScope.province(province.id, province.name))];
   }
   if (q.length < 3 || RegExp(r'^\d+$').hasMatch(q)) return const [];
 
@@ -210,6 +208,14 @@ class StationsController extends ChangeNotifier {
   Timer? _refreshTimer;
   bool _disposed = false;
 
+  // Evolución de precios: los de la zona y el combustible actuales hace un
+  // día y hace una semana.
+  TrendPeriod _trendPeriod = TrendPeriod.day;
+  String? _trendKey;
+  bool trendLoading = false;
+  final _history = <TrendPeriod, PriceHistory>{};
+  final _zoneTrends = <TrendPeriod, ZoneTrend?>{};
+
   SearchScope? get scope => _scope;
   FuelType get fuel => _fuel;
   SortMode get sort => _sort;
@@ -243,9 +249,7 @@ class StationsController extends ChangeNotifier {
           StationEntry(
             s,
             s.prices.values.isEmpty ? 0 : s.prices.values.first,
-            pos == null
-                ? null
-                : LocationService.distanceKm(pos.latitude, pos.longitude, s.latitude, s.longitude),
+            pos == null ? null : LocationService.distanceKm(pos.latitude, pos.longitude, s.latitude, s.longitude),
           ),
     ];
     if (pos != null) list.sort((a, b) => a.distanceKm!.compareTo(b.distanceKm!));
@@ -264,6 +268,98 @@ class StationsController extends ChangeNotifier {
     ];
     if (prices.isEmpty) return null;
     return prices.fold<double>(0, (sum, p) => sum + p) / prices.length;
+  }
+
+  /// Con qué día se compara el precio de cada gasolinera de la lista.
+  TrendPeriod get trendPeriod => _trendPeriod;
+
+  void setTrendPeriod(TrendPeriod period) {
+    if (period == _trendPeriod) return;
+    _trendPeriod = period;
+    _notify();
+  }
+
+  /// Si hay (o se está cargando) evolución de precios para la zona actual. No
+  /// la hay para toda España ni si el histórico no responde.
+  bool get hasTrend => trendLoading || _history.isNotEmpty;
+
+  /// Cuánto ha cambiado (en €/L) el precio de [stationId] desde el día de
+  /// [period] (por defecto, el elegido). `null` si no hay dato de ese día.
+  double? priceChange(String stationId, double price, [TrendPeriod? period]) {
+    final before = _history[period ?? _trendPeriod]?.prices[stationId];
+    return before == null ? null : price - before;
+  }
+
+  /// Precio de [stationId] el día de [period], si se conoce.
+  ({DateTime day, double price})? pastPrice(String stationId, TrendPeriod period) {
+    final history = _history[period];
+    final price = history?.prices[stationId];
+    return history == null || price == null ? null : (day: history.day, price: price);
+  }
+
+  /// Cambio del precio medio de la lista actual desde el día de [period].
+  ZoneTrend? zoneTrendFor(TrendPeriod period) {
+    if (_zoneTrends.containsKey(period)) return _zoneTrends[period];
+    final history = _history[period];
+    return _zoneTrends[period] = history == null ? null : zoneTrend(entries, history);
+  }
+
+  /// Día de los precios actuales (sin hora): con el que se cuentan "ayer" y
+  /// "hace una semana".
+  DateTime get pricesDay {
+    final d = _snapshot?.publishedAt ?? DateTime.now();
+    return DateTime(d.year, d.month, d.day);
+  }
+
+  /// Zona, combustible y día de la evolución que toca mostrar; `null` si no
+  /// se puede (sin datos todavía, o toda España).
+  String? get _wantedTrendKey {
+    final s = _scope;
+    if (s == null || _snapshot == null || s.kind == ScopeKind.spain) return null;
+    return '${s.kind.name}|${s.id}|${s.townId}|${_fuel.name}|$pricesDay';
+  }
+
+  /// Descarga en segundo plano los precios de hace un día y una semana. Se
+  /// lanza después de mostrar la lista para no retrasarla.
+  Future<void> _loadTrend() async {
+    final key = _wantedTrendKey;
+    if (key == _trendKey) return;
+    _trendKey = key;
+    _history.clear();
+    _zoneTrends.clear();
+    final scope = _scope;
+    if (key == null || scope == null) {
+      trendLoading = false;
+      return;
+    }
+    trendLoading = true;
+    final fuel = _fuel;
+    final today = pricesDay;
+    final results = await Future.wait([
+      for (final period in TrendPeriod.values) _historyAround(scope, fuel, today, period.days),
+    ]);
+    if (key != _trendKey || _disposed) return;
+    for (final (i, period) in TrendPeriod.values.indexed) {
+      final history = results[i];
+      if (history != null) _history[period] = history;
+    }
+    trendLoading = false;
+    _zoneTrends.clear();
+    _notify();
+  }
+
+  /// Precios de hace [days] días; si ese día aún no se ha publicado (o falla),
+  /// los del día anterior.
+  Future<PriceHistory?> _historyAround(SearchScope scope, FuelType fuel, DateTime today, int days) async {
+    for (final back in [days, days + 1]) {
+      try {
+        final history = await _repo.history(scope, fuel, DateTime(today.year, today.month, today.day - back));
+        if (history.prices.isNotEmpty) return history;
+      } catch (_) {
+        // Se prueba con el día anterior; si tampoco, no se muestra la evolución.
+      }
+    }
+    return null;
   }
 
   Future<void> init() async {
@@ -415,8 +511,7 @@ class StationsController extends ChangeNotifier {
     final last = _lastProvinceCheck;
     final moved =
         last == null ||
-        Geolocator.distanceBetween(last.latitude, last.longitude, p.latitude, p.longitude) >
-            _provinceRecheckMeters;
+        Geolocator.distanceBetween(last.latitude, last.longitude, p.latitude, p.longitude) > _provinceRecheckMeters;
     if (!moved || _checkingProvince) return;
 
     _checkingProvince = true;
@@ -433,9 +528,7 @@ class StationsController extends ChangeNotifier {
       // Si seguimos la ubicación, se pasa al pueblo (o provincia) actual.
       final s = _scope;
       final followTown =
-          s == null ||
-          s.kind == ScopeKind.myTown ||
-          (s.kind == ScopeKind.myProvince && !_provinceChosenByUser);
+          s == null || s.kind == ScopeKind.myTown || (s.kind == ScopeKind.myProvince && !_provinceChosenByUser);
       if (followTown) {
         if (myTownId != null) {
           await useMyTown();
@@ -492,12 +585,7 @@ class StationsController extends ChangeNotifier {
   List<PlaceSuggestion> get placeSuggestions {
     if (_query.trim().length < 3) return const [];
     if (_municipalities.isEmpty) unawaited(_loadMunicipalities());
-    return _places ??= findPlaces(
-      _query,
-      current: _scope,
-      municipalities: _municipalities,
-      provinces: provinces,
-    );
+    return _places ??= findPlaces(_query, current: _scope, municipalities: _municipalities, provinces: provinces);
   }
 
   /// Cambia a la zona de una sugerencia manteniendo la búsqueda, así se ven
@@ -521,6 +609,8 @@ class StationsController extends ChangeNotifier {
   void _invalidate() {
     _entries = null;
     _places = null;
+    _zoneTrends.clear();
+    if (_wantedTrendKey != _trendKey) unawaited(_loadTrend());
     _notify();
   }
 

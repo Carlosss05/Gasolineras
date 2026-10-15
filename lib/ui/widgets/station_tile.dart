@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../logic/price_trend.dart';
 import '../../models/fuel_type.dart';
 import '../../models/station.dart';
 import '../../state/favorites_controller.dart';
 import '../../state/garage_controller.dart';
+import '../../state/stations_controller.dart';
 import '../format.dart';
 import '../garage_forms.dart';
 import '../theme.dart';
 import 'brand_badge.dart';
+import 'price_change.dart';
 
 /// Tarjeta de una gasolinera en la lista: marca, dirección, distancia y el
 /// precio grande con su color (verde barato, rojo caro).
@@ -22,6 +25,7 @@ class StationTile extends StatelessWidget {
     required this.distanceKm,
     required this.minPrice,
     required this.maxPrice,
+    this.change,
   });
 
   final Station station;
@@ -30,6 +34,9 @@ class StationTile extends StatelessWidget {
   final double? distanceKm;
   final double minPrice;
   final double maxPrice;
+
+  /// Cuánto ha subido o bajado el precio (€/L), si se conoce.
+  final double? change;
 
   @override
   Widget build(BuildContext context) {
@@ -74,10 +81,8 @@ class StationTile extends StatelessWidget {
                           spacing: 6,
                           runSpacing: 4,
                           children: [
-                            if (distanceKm != null)
-                              InfoPill(icon: Icons.near_me, text: formatDistance(distanceKm!)),
-                            if (isOpen24h(station.schedule))
-                              const InfoPill(icon: Icons.schedule, text: '24 h'),
+                            if (distanceKm != null) InfoPill(icon: Icons.near_me, text: formatDistance(distanceKm!)),
+                            if (isOpen24h(station.schedule)) const InfoPill(icon: Icons.schedule, text: '24 h'),
                           ],
                         ),
                       ],
@@ -98,6 +103,7 @@ class StationTile extends StatelessWidget {
                       ),
                     ),
                     Text('€/L', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                    if (change case final c?) PriceChange(change: c),
                   ],
                 ),
                 IconButton(
@@ -148,13 +154,10 @@ class InfoPill extends StatelessWidget {
 
 /// Enlace de ruta en Google Maps. Solo lleva las coordenadas (números), nunca
 /// textos de la API, para que un nombre manipulado no pueda alterar la URL.
-Uri directionsUri(Station station) => Uri.https('www.google.com', '/maps/dir/', {
-  'api': '1',
-  'destination': '${station.latitude},${station.longitude}',
-});
+Uri directionsUri(Station station) =>
+    Uri.https('www.google.com', '/maps/dir/', {'api': '1', 'destination': '${station.latitude},${station.longitude}'});
 
-Future<void> openDirections(Station station) =>
-    launchUrl(directionsUri(station), mode: LaunchMode.externalApplication);
+Future<void> openDirections(Station station) => launchUrl(directionsUri(station), mode: LaunchMode.externalApplication);
 
 /// Ficha de la gasolinera: todos sus precios (el combustible elegido,
 /// destacado), horario, distancia y acciones.
@@ -206,8 +209,7 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  if (distanceKm != null)
-                    InfoPill(icon: Icons.near_me, text: 'A ${formatDistance(distanceKm)}'),
+                  if (distanceKm != null) InfoPill(icon: Icons.near_me, text: 'A ${formatDistance(distanceKm)}'),
                   if (station.schedule.isNotEmpty)
                     InfoPill(
                       icon: Icons.schedule,
@@ -229,10 +231,10 @@ Future<void> showStationDetails(BuildContext context, Station station, double? d
                   crossAxisSpacing: 8,
                   childAspectRatio: 2.6,
                   children: [
-                    for (final e in prices)
-                      _PriceCell(fuel: e.key, price: e.value, highlighted: e.key == fuel),
+                    for (final e in prices) _PriceCell(fuel: e.key, price: e.value, highlighted: e.key == fuel),
                   ],
                 ),
+              if (fuel != null) _PriceEvolution(station: station, fuel: fuel),
               if (calcFuel != null && calcPrice != null) ...[
                 const SizedBox(height: 18),
                 FuelCalculator(fuel: calcFuel, price: calcPrice, tankLiters: car?.tankLiters),
@@ -374,6 +376,52 @@ class _FuelCalculatorState extends State<FuelCalculator> {
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Precio del combustible elegido ayer y hace una semana en esta gasolinera,
+/// y cuánto ha cambiado desde entonces.
+class _PriceEvolution extends StatelessWidget {
+  const _PriceEvolution({required this.station, required this.fuel});
+
+  final Station station;
+  final FuelType fuel;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<StationsController>();
+    final price = station.prices[fuel];
+    // El histórico descargado es el del combustible de la lista.
+    if (price == null || c.fuel != fuel) return const SizedBox.shrink();
+    final rows = [for (final period in TrendPeriod.values) ?c.pastPrice(station.id, period)];
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Evolución · ${fuel.label}', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          for (final past in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${daysAgoLabel(past.day, c.pricesDay)}: ${formatPrice(past.price)}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  PriceChange(change: price - past.price, showUnchanged: true, style: theme.textTheme.labelLarge),
+                ],
+              ),
+            ),
         ],
       ),
     );

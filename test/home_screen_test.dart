@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gasolineras/data/fuel_price_repository.dart';
 import 'package:gasolineras/data/minetur_repository.dart';
 import 'package:gasolineras/models/fuel_type.dart';
+import 'package:gasolineras/models/price_history.dart';
 import 'package:gasolineras/models/region.dart';
 import 'package:gasolineras/models/station.dart';
 import 'package:gasolineras/services/location_service.dart';
@@ -21,6 +22,13 @@ class _Repository extends MineturRepository {
   @override
   Future<PriceSnapshot> stations(SearchScope scope, {bool forceRefresh = false}) async =>
       PriceSnapshot(stations: items, publishedAt: null);
+
+  /// Ayer: '0' estaba 2 cts más cara y '1', 1 ct más barata. Hace una semana: '0', 10 cts más cara.
+  @override
+  Future<PriceHistory> history(SearchScope scope, FuelType fuel, DateTime day) async {
+    final weekAgo = DateTime.now().difference(day).inDays >= 3;
+    return PriceHistory(day: day, prices: weekAgo ? {'0': 1.70} : {'0': 1.62, '1': 1.60});
+  }
 }
 
 Station _station(String id, double price) => Station(
@@ -112,6 +120,27 @@ void main() {
     await tester.tap(find.byTooltip('Ver lista'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('30 gasolineras'), findsOneWidget);
+  });
+
+  testWidgets('muestra cuánto ha cambiado la media y cada gasolinera', (tester) async {
+    await _pumpHome(tester, scope: const SearchScope.province('03', 'Alicante'));
+
+    expect(find.text('Media desde ayer'), findsOneWidget);
+    expect(find.text('Media en 7 días'), findsOneWidget);
+    // Media de '0' (−2 cts) y '1' (+1 ct).
+    expect(find.text('0,5 cts'), findsOneWidget);
+    expect(
+      find.text('De 2 gasolineras, 1 han bajado y 1 han subido. Cada una muestra su cambio bajo el precio.'),
+      findsOne,
+    );
+    // '0' es la más barata: su bajada sale en la tarjeta destacada y en su fila.
+    expect(find.text('2,0 cts'), findsNWidgets(2));
+    expect(find.text('1,0 cts'), findsOneWidget);
+
+    await tester.tap(find.text('Media en 7 días'));
+    await tester.pumpAndSettle();
+    expect(find.text('10,0 cts'), findsNWidgets(3));
+    expect(find.text('1,0 cts'), findsNothing);
   });
 
   testWidgets('sin zona, el aviso va dentro de la lista bajo la cabecera', (tester) async {

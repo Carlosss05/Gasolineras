@@ -32,6 +32,7 @@ Encuentra la gasolinera más barata de tu pueblo con precios oficiales actualiza
 | 📍 **Tu pueblo, automáticamente** | Detecta dónde estás y muestra las gasolineras de tu municipio (Calpe, Elche…). Cambia sola al moverte. |
 | 🏆 **La más barata, destacada** | Te dice cuánto ahorras llenando 50 L frente a la media de la zona, con un botón para ir directamente. |
 | ⏱️ **Precios al momento** | Datos oficiales del Ministerio para la Transición Ecológica, que se actualizan cada ~30 min. La app los refresca sola. |
+| 📈 **¿Sube o baja?** | Cuánto ha cambiado el precio medio de tu zona desde ayer y en 7 días, y cada gasolinera bajo su precio. Con el histórico oficial, solo de tu zona y combustible. |
 | ↕️ **Ordena como quieras** | Por precio, cercanía o **Rentables**: con tu coche configurado, compara el coste de llenar el depósito y del viaje de ida y vuelta. También en favoritas. |
 | 🗺️ **Mapa** | Etiquetas con el precio, de verde (barata) a rojo (cara). Se ven más a medida que te acercas. |
 | 🔎 **Busca en toda España** | Pueblo, marca o código postal. Si está en otra provincia, te sugiere ir allí («Calpe/Calp · Alicante»). |

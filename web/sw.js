@@ -7,6 +7,7 @@
 // - Motor de Flutter y tipografías (URLs versionadas): caché primero.
 // - API de precios: red primero con tiempo límite; sin conexión, la última
 //   respuesta guardada (la app muestra la fecha de publicación de esos precios).
+// - Histórico de precios (días pasados, no cambian): caché primero.
 // - Teselas del mapa: caché primero, con un máximo de entradas.
 
 const VERSION = 'v6';
@@ -15,6 +16,8 @@ const RUNTIME = `runtime-${VERSION}`;
 const PRICES = `prices-${VERSION}`;
 const TILES = `tiles-${VERSION}`;
 const MAX_TILES = 400;
+const HISTORY = `history-${VERSION}`;
+const MAX_HISTORY = 40;
 
 const SHELL = ['./', 'index.html', 'main.dart.js', 'flutter.js', 'flutter_bootstrap.js', 'manifest.json',
   'ios-viewport.js', 'diag.js', 'install.js',
@@ -25,7 +28,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  const keep = new Set([APP, RUNTIME, PRICES, TILES]);
+  const keep = new Set([APP, RUNTIME, PRICES, TILES, HISTORY]);
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))))
@@ -38,7 +41,9 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  if (url.hostname === 'sedeaplicaciones.minetur.gob.es') {
+  if (url.hostname === 'sedeaplicaciones.minetur.gob.es' && url.pathname.includes('/EstacionesTerrestresHist/')) {
+    event.respondWith(cacheFirst(req, HISTORY, MAX_HISTORY));
+  } else if (url.hostname === 'sedeaplicaciones.minetur.gob.es') {
     event.respondWith(networkFirst(req, PRICES, 15000));
   } else if (url.hostname === 'tile.openstreetmap.org') {
     event.respondWith(cacheFirst(req, TILES, MAX_TILES));

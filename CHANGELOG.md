@@ -2,6 +2,10 @@
 
 Cada versión de Android se publica en [Releases](https://github.com/Carlosss05/Gasolineras/releases) y la web en [carlosss05.github.io/Gasolineras](https://carlosss05.github.io/Gasolineras/).
 
+## Próxima versión
+
+- **¿Sube o baja?** Cuánto ha cambiado el precio medio de tu zona desde ayer y en 7 días, y el cambio de cada gasolinera bajo su precio y en su ficha.
+
 ## 1.2.0 — octubre de 2026
 
 **Mi coche**

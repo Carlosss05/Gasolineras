@@ -1,3 +1,5 @@
+import '../models/fuel_type.dart';
+import '../models/price_history.dart';
 import '../models/region.dart';
 import '../models/station.dart';
 
@@ -13,6 +15,11 @@ abstract interface class FuelPriceRepository {
   Future<List<Municipality>> municipalities();
 
   Future<PriceSnapshot> stations(SearchScope scope, {bool forceRefresh = false});
+
+  /// Precios de [fuel] en la zona de [scope] el día [day], para ver cuánto han
+  /// subido o bajado. Falla si ese día aún no está publicado o para toda
+  /// España (demasiados datos para pedirlos en segundo plano).
+  Future<PriceHistory> history(SearchScope scope, FuelType fuel, DateTime day);
 }
 
 class FuelApiException implements Exception {
