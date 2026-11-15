@@ -8,6 +8,8 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:gasolineras/data/minetur_repository.dart';
+import 'package:gasolineras/data/snapshot_store.dart';
+import 'package:gasolineras/logic/savings.dart';
 import 'package:gasolineras/models/fuel_type.dart';
 import 'package:gasolineras/models/region.dart';
 import 'package:gasolineras/state/stations_controller.dart';
@@ -30,18 +32,7 @@ class Bench {
       '${ok ? '✓' : '✗'} ${name.padRight(40)} ${ms.toStringAsFixed(1).padLeft(7)} ms  (límite ${budgetMs.toStringAsFixed(0)} ms)';
 }
 
-const _brands = [
-  'REPSOL',
-  'CEPSA',
-  'MOEVE',
-  'GALP',
-  'BALLENOIL',
-  'PLENERGY',
-  'SHELL',
-  'BP',
-  'PETROPRIX',
-  'AVIA',
-];
+const _brands = ['REPSOL', 'CEPSA', 'MOEVE', 'GALP', 'BALLENOIL', 'PLENERGY', 'SHELL', 'BP', 'PETROPRIX', 'AVIA'];
 const _streets = [
   'CARRETERA NACIONAL 332 KM. 12',
   'AVENIDA DE LA CONSTITUCIÓN, 45',
@@ -107,9 +98,7 @@ Uint8List fakeApiResponse(int n) {
       },
   ];
   return Uint8List.fromList(
-    utf8.encode(
-      jsonEncode({'Fecha': '07/10/2026 10:00:00', 'ListaEESSPrecio': list, 'ResultadoConsulta': 'OK'}),
-    ),
+    utf8.encode(jsonEncode({'Fecha': '07/10/2026 10:00:00', 'ListaEESSPrecio': list, 'ResultadoConsulta': 'OK'})),
   );
 }
 
@@ -182,9 +171,7 @@ List<Bench> runBenchmarks({void Function(String)? log}) {
   add(
     Bench(
       'Sugerir pueblos, 8.112 (por tecla)',
-      medianMs(
-        () => findPlaces('calp', current: murcia, municipalities: municipalities, provinces: const []),
-      ),
+      medianMs(() => findPlaces('calp', current: murcia, municipalities: municipalities, provinces: const [])),
       30,
     ),
   );
@@ -197,5 +184,20 @@ List<Bench> runBenchmarks({void Function(String)? log}) {
       20,
     ),
   );
+
+  // "¿Dónde reposto?": se recalcula en cada movimiento de los controles.
+  final located = buildEntries(spain, fuel: FuelType.gasolina95, sort: SortMode.price, position: here);
+  const plan = TripPlan(liters: 40, consumption: 6.5);
+  add(Bench('Recomendar entre 12.000 (por ajuste)', medianMs(() => recommend(located, plan)), 20));
+
+  // Arranque: leer los últimos precios guardados de una provincia en vez de
+  // esperar a la red (que en el móvil son segundos).
+  final snapshot = parseSnapshot(provinceJson);
+  final stored = encodeSnapshot('P03', snapshot);
+  log?.call('Precios guardados de una provincia: ${(stored.length / 1024).toStringAsFixed(0)} KB');
+  add(
+    Bench('Abrir con precios guardados (500)', medianMs(() => decodeSnapshot(stored, 'P03', now: DateTime.now())), 30),
+  );
+  add(Bench('Guardar precios (500)', medianMs(() => encodeSnapshot('P03', snapshot)), 30));
   return results;
 }

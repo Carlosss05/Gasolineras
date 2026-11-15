@@ -16,6 +16,10 @@ abstract interface class FuelPriceRepository {
 
   Future<PriceSnapshot> stations(SearchScope scope, {bool forceRefresh = false});
 
+  /// Lo último descargado de [scope] en esta sesión, aunque ya no sea reciente,
+  /// para enseñarlo al instante mientras se actualiza. `null` si no hay nada.
+  PriceSnapshot? peek(SearchScope scope);
+
   /// Precios de [fuel] en la zona de [scope] el día [day], para ver cuánto han
   /// subido o bajado. Falla si ese día aún no está publicado o para toda
   /// España (demasiados datos para pedirlos en segundo plano).

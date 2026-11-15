@@ -29,10 +29,7 @@ class LocationService {
   Future<Position?> current() async {
     try {
       return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 20),
-        ),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 20)),
       );
     } catch (_) {
       // getLastKnownPosition no existe en la web y ahí lanza una excepción.
@@ -76,22 +73,16 @@ class LocationService {
 
   Future<DetectedPlace?> _placeFromNominatim(double latitude, double longitude) async {
     try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
-        'format': 'jsonv2',
-        'lat': '$latitude',
-        'lon': '$longitude',
-        'zoom': '18',
-        'addressdetails': '1',
-      });
       final res = await _client
           .get(
-            uri,
+            nominatimReverseUri(latitude, longitude),
             // Nominatim exige identificar la app. En la web el navegador no
             // deja cambiar el User-Agent y basta con el Referer.
             headers: kIsWeb ? null : {'User-Agent': 'Gasolineras/1.0 (github.com/Carlosss05/Gasolineras)'},
           )
           .timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return null;
+      // Una dirección son 1-2 KB: algo mucho mayor no es la respuesta esperada.
+      if (res.statusCode != 200 || res.bodyBytes.length > 64 * 1024) return null;
       final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return placeFromAddress((json['address'] as Map?)?.cast<String, dynamic>() ?? const {});
     } catch (_) {
@@ -102,6 +93,19 @@ class LocationService {
   static double distanceKm(double lat1, double lng1, double lat2, double lng2) =>
       Geolocator.distanceBetween(lat1, lng1, lat2, lng2) / 1000;
 }
+
+/// Consulta a OpenStreetMap para saber el municipio de unas coordenadas.
+///
+/// Es un servicio de terceros: no necesita (ni recibe) la posición exacta.
+/// Tres decimales son unos 100 m, de sobra para saber el pueblo y el código
+/// postal sin revelar el portal en el que estás.
+Uri nominatimReverseUri(double latitude, double longitude) => Uri.https('nominatim.openstreetmap.org', '/reverse', {
+  'format': 'jsonv2',
+  'lat': latitude.toStringAsFixed(3),
+  'lon': longitude.toStringAsFixed(3),
+  'zoom': '18',
+  'addressdetails': '1',
+});
 
 /// Los dos primeros dígitos del código postal español son la provincia.
 String? provinceFromPostalCode(String? postalCode) {
@@ -126,7 +130,8 @@ DetectedPlace? placeFromAddress(Map<String, dynamic> address) {
   if (province == null) return null;
   return DetectedPlace(province, [
     for (final key in ['city', 'town', 'village', 'municipality'])
-      if (address[key] is String && (address[key] as String).trim().isNotEmpty) address[key] as String,
+      // Nombre de un servicio externo: solo texto y de longitud razonable.
+      if (address[key] case final String name when name.trim().isNotEmpty && name.length <= 120) name,
   ]);
 }
 

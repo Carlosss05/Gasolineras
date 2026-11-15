@@ -12,12 +12,14 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gasolineras/data/fuel_price_repository.dart';
 import 'package:gasolineras/data/minetur_repository.dart';
+import 'package:gasolineras/logic/savings.dart';
 import 'package:gasolineras/models/car.dart';
 import 'package:gasolineras/models/fuel_type.dart';
 import 'package:gasolineras/models/region.dart';
 import 'package:gasolineras/models/station.dart';
 import 'package:gasolineras/services/location_service.dart';
 import 'package:gasolineras/state/favorites_controller.dart';
+import 'package:gasolineras/state/stations_controller.dart';
 import 'package:gasolineras/ui/format.dart';
 import 'package:gasolineras/ui/widgets/station_tile.dart';
 import 'package:http/http.dart' as http;
@@ -50,11 +52,7 @@ void main() {
 
     test('coordenadas fuera del planeta o no numéricas: la estación se descarta', () {
       for (final (lat, lng) in [('91', '0'), ('0', '181'), ('NaN', '0'), ('Infinity', '1'), ('abc', '1')]) {
-        expect(
-          Station.fromApi(_station({'Latitud': lat, 'Longitud (WGS84)': lng})),
-          isNull,
-          reason: '$lat,$lng',
-        );
+        expect(Station.fromApi(_station({'Latitud': lat, 'Longitud (WGS84)': lng})), isNull, reason: '$lat,$lng');
       }
     });
 
@@ -96,9 +94,7 @@ void main() {
     });
 
     test('respuesta que no es JSON: mensaje claro, no un error interno', () async {
-      final repo = MineturRepository(
-        client: MockClient((_) async => http.Response('<html>Error</html>', 200)),
-      );
+      final repo = MineturRepository(client: MockClient((_) async => http.Response('<html>Error</html>', 200)));
       expect(
         repo.stations(const SearchScope.province('03', 'Alicante')),
         throwsA(isA<FuelApiException>().having((e) => e.message, 'message', contains('no válidos'))),
@@ -134,6 +130,69 @@ void main() {
       expect(placeFromAddress({'postcode': '03710', 'country_code': 'fr'}), isNull);
       expect(provinceFromPostalCode('99999'), isNull);
       expect(provinceFromPostalCode('03710; DROP'), isNull);
+    });
+
+    test('OpenStreetMap: nombres de pueblo enormes o que no son texto se ignoran', () {
+      final place = placeFromAddress({'postcode': '03710', 'city': 'A' * 5000, 'town': 42, 'village': 'Calpe'})!;
+      expect(place.townNames, ['Calpe']);
+    });
+
+    test('OpenStreetMap recibe la posición redondeada (~100 m), no la exacta', () {
+      final uri = nominatimReverseUri(38.644712345, 0.044598765);
+      expect(uri.scheme, 'https');
+      expect(uri.host, 'nominatim.openstreetmap.org');
+      expect(uri.queryParameters['lat'], '38.645');
+      expect(uri.queryParameters['lon'], '0.045');
+      expect(uri.toString(), isNot(contains('644712')));
+    });
+
+    test('respuesta gigante: se corta la descarga en vez de llenar la memoria', () async {
+      const scope = SearchScope.province('03', 'Alicante');
+      final megabyte = Uint8List(1024 * 1024);
+      var sent = 0;
+      // El servidor no declara el tamaño y no deja de enviar datos.
+      final endless = MineturRepository(
+        client: MockClient.streaming((request, body) async {
+          Stream<List<int>> chunks() async* {
+            for (var i = 0; i < 64; i++) {
+              sent++;
+              yield megabyte;
+            }
+          }
+
+          return http.StreamedResponse(chunks(), 200);
+        }),
+      );
+      await expectLater(
+        endless.history(scope, FuelType.gasolina95, DateTime(2026, 11, 14)),
+        throwsA(isA<FuelApiException>()),
+      );
+      // Se dejó de leer al pasar el límite (4 MB), no al final.
+      expect(sent, lessThan(8));
+
+      // Si el servidor declara un tamaño absurdo, ni se empieza a leer.
+      var read = false;
+      final declared = MineturRepository(
+        client: MockClient.streaming((request, body) async {
+          Stream<List<int>> chunks() async* {
+            read = true;
+            yield megabyte;
+          }
+
+          return http.StreamedResponse(chunks(), 200, contentLength: 500 * 1024 * 1024);
+        }),
+      );
+      await expectLater(declared.stations(scope), throwsA(isA<FuelApiException>()));
+      expect(read, isFalse);
+    });
+
+    test('listas desmesuradas se procesan solo hasta un máximo', () {
+      final many = _bytes({
+        'ListaEESSPrecio': [
+          for (var i = 0; i < maxApiItems + 50; i++) {'IDEESS': '$i', 'PrecioProducto': '1,5'},
+        ],
+      });
+      expect(parseHistory(many), hasLength(maxApiItems));
     });
   });
 
@@ -217,6 +276,34 @@ void main() {
       expect(RefuelEntry.isValid(liters: 40, totalEuros: 64, odometerKm: -1), isFalse);
       expect(CarProfile.isValid(tankLiters: 5000, consumption: 6), isFalse);
     });
+
+    test('un texto enorme pegado en el buscador se acota', () {
+      final c = StationsController(
+        MineturRepository(client: MockClient((_) async => http.Response('', 503))),
+        LocationService(),
+      );
+      addTearDown(c.dispose);
+      c.setQuery('a' * 100000);
+      expect(c.query.length, StationsController.maxQueryLength);
+    });
+
+    test('el plan de repostaje solo admite valores razonables', () {
+      final c = StationsController(
+        MineturRepository(client: MockClient((_) async => http.Response('', 503))),
+        LocationService(),
+      );
+      addTearDown(c.dispose);
+
+      c.setPlan(liters: 1e12, consumption: -40);
+      expect(c.plan.liters, TripPlan.maxLiters);
+      expect(c.plan.consumption, TripPlan.minConsumption);
+
+      // Infinito o "no es un número" se ignoran: se queda lo que había.
+      c.setPlan(liters: double.nan, consumption: double.infinity);
+      expect(c.plan.liters, TripPlan.maxLiters);
+      expect(c.plan.consumption, TripPlan.minConsumption);
+      expect(stationCost(StationEntry(Station.fromApi(_station({}))!, 1.619, 3), c.plan).total.isFinite, isTrue);
+    });
   });
 
   group('Repositorio y configuración', () {
@@ -236,8 +323,24 @@ void main() {
 
     test('Android no permite tráfico sin cifrar ni hace la app depurable', () {
       final manifest = File('${root.path}/android/app/src/main/AndroidManifest.xml').readAsStringSync();
-      expect(manifest, isNot(contains('usesCleartextTraffic="true"')));
+      expect(manifest, contains('usesCleartextTraffic="false"'));
       expect(manifest, isNot(contains('android:debuggable="true"')));
+    });
+
+    test('las acciones de GitHub van fijadas a un commit, no a una etiqueta movible', () {
+      final workflows = Directory('${root.path}/.github/workflows').listSync().whereType<File>();
+      final unpinned = <String>[];
+      for (final f in workflows) {
+        for (final line in f.readAsLinesSync()) {
+          final uses = RegExp(r'uses:\s*(\S+)').firstMatch(line)?.group(1);
+          if (uses != null && !RegExp(r'@[0-9a-f]{40}$').hasMatch(uses)) unpinned.add(uses);
+        }
+      }
+      expect(unpinned, isEmpty);
+      // Y alguien avisa cuando sale una versión nueva.
+      final dependabot = File('${root.path}/.github/dependabot.yml').readAsStringSync();
+      expect(dependabot, contains('package-ecosystem: github-actions'));
+      expect(dependabot, contains('package-ecosystem: pub'));
     });
 
     test('la clave de firma y los secretos están excluidos de git', () {

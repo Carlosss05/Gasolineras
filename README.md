@@ -30,7 +30,7 @@ Encuentra la gasolinera más barata de tu pueblo con precios oficiales actualiza
 | | |
 |---|---|
 | 📍 **Tu pueblo, automáticamente** | Detecta dónde estás y muestra las gasolineras de tu municipio (Calpe, Elche…). Cambia sola al moverte. |
-| 🏆 **La más barata, destacada** | Te dice cuánto ahorras llenando 50 L frente a la media de la zona, con un botón para ir directamente. |
+| 🧭 **¿Dónde reposto?** | Te dice a qué gasolinera te sale más barato ir contando el precio, la distancia y lo que gasta tu coche en el viaje. Ajusta los litros, el consumo y si es ida y vuelta, y compara con la más cercana y la más barata. |
 | ⏱️ **Precios al momento** | Datos oficiales del Ministerio para la Transición Ecológica, que se actualizan cada ~30 min. La app los refresca sola. |
 | 📈 **¿Sube o baja?** | Cuánto ha cambiado el precio medio de tu zona desde ayer y en 7 días, y cada gasolinera bajo su precio. Con el histórico oficial, solo de tu zona y combustible. |
 | ↕️ **Ordena como quieras** | Por precio, cercanía o **Rentables**: con tu coche configurado, compara el coste de llenar el depósito y del viaje de ida y vuelta. También en favoritas. |
@@ -135,8 +135,8 @@ flutter test test/security_test.dart                          # validación de d
 dart run tool/osv_audit.dart                                  # vulnerabilidades conocidas en dependencias
 ```
 
-- **Rendimiento:** procesar las 12.000 gasolineras de España tarda ~130 ms en el navegador; ordenar o buscar, menos de 6 ms por tecla. Las medidas tienen límites y fallan si algo se vuelve lento ([tool/benchmarks.dart](tool/benchmarks.dart)).
-- **Seguridad:** los datos de la API y lo guardado en el móvil se validan (precios, coordenadas, tamaños); la web tiene una *Content Security Policy* que solo permite conectar con los servicios que usa la app; todo va por HTTPS; las claves nunca están en el repositorio.
+- **Rendimiento:** al abrir, la app enseña al instante los últimos precios guardados (2 ms) y los actualiza por detrás, en vez de esperar a la red. Procesar las 12.000 gasolineras de España tarda ~190 ms en un ordenador; ordenar, buscar o recalcular la recomendación, menos de 4 ms. Las medidas tienen límites y fallan si algo se vuelve lento ([tool/benchmarks.dart](tool/benchmarks.dart)).
+- **Seguridad:** los datos de la API y lo guardado en el móvil se validan (precios, coordenadas, tamaños) y las descargas tienen un tamaño máximo; la web tiene una *Content Security Policy* que solo permite conectar con los servicios que usa la app; todo va por HTTPS; a OpenStreetMap solo se le envía la posición redondeada a ~100 m; las acciones de GitHub que compilan y firman van fijadas a un commit exacto; las claves nunca están en el repositorio.
 - El workflow [Seguridad y rendimiento](.github/workflows/security.yml) lo comprueba en cada push y cada lunes.
 
 ### Publicar una versión

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,19 +18,13 @@ import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Nombres de meses en español para el diario de repostajes.
-  await initializeDateFormatting('es');
-  // La tipografía va incluida en assets/google_fonts: nunca se descarga de
-  // Google (arranque más rápido, sin parpadeo de letra y sin conexión).
-  GoogleFonts.config.allowRuntimeFetching = false;
-  // Se cargan los pesos que usa la app antes de pintar, para que el texto no
-  // cambie de letra al aparecer. Como mucho 1,5 s: con red lenta no se espera.
-  for (final w in [FontWeight.w400, FontWeight.w500, FontWeight.w600, FontWeight.w700, FontWeight.w800]) {
-    GoogleFonts.plusJakartaSans(fontWeight: w);
-  }
-  await GoogleFonts.pendingFonts().timeout(const Duration(milliseconds: 1500), onTimeout: () => const []);
-  // Web en iPhone: zona tapada abajo por la barra de Safari (ver web/ios-viewport.js).
-  initWebInsets();
+  // Si falla el pintado de una parte de la pantalla, se sustituye solo esa
+  // parte por un aviso discreto en vez de dejar un bloque gris.
+  ErrorWidget.builder = (details) => kDebugMode ? ErrorWidget(details.exception) : const _BrokenPart();
+
+  // Lo primero, los datos: la zona guardada, sus últimos precios, la
+  // ubicación y la petición a la red arrancan ya, mientras se preparan las
+  // tipografías, en vez de esperar a que estas terminen.
   final FuelPriceRepository repository = MineturRepository();
   final stations = StationsController(repository, LocationService());
   final garage = GarageController();
@@ -45,6 +40,20 @@ Future<void> main() async {
   garage.load();
   stations.init();
 
+  // Nombres de meses en español para el diario de repostajes.
+  await initializeDateFormatting('es');
+  // La tipografía va incluida en assets/google_fonts: nunca se descarga de
+  // Google (arranque más rápido, sin parpadeo de letra y sin conexión).
+  GoogleFonts.config.allowRuntimeFetching = false;
+  // Se cargan los pesos que usa la app antes de pintar, para que el texto no
+  // cambie de letra al aparecer. Como mucho 1,5 s: con red lenta no se espera.
+  for (final w in [FontWeight.w400, FontWeight.w500, FontWeight.w600, FontWeight.w700, FontWeight.w800]) {
+    GoogleFonts.plusJakartaSans(fontWeight: w);
+  }
+  await GoogleFonts.pendingFonts().timeout(const Duration(milliseconds: 1500), onTimeout: () => const []);
+  // Web en iPhone: zona tapada abajo por la barra de Safari (ver web/ios-viewport.js).
+  initWebInsets();
+
   runApp(
     MultiProvider(
       providers: [
@@ -56,6 +65,27 @@ Future<void> main() async {
       child: const GasolinerasApp(),
     ),
   );
+}
+
+/// Sustituto de una parte de la pantalla que no se ha podido pintar. No
+/// depende del tema ni del idioma de la app, que podrían ser lo que falla.
+class _BrokenPart extends StatelessWidget {
+  const _BrokenPart();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          'No se ha podido mostrar esta parte.',
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Color(0xFF8A9A92), fontSize: 13),
+        ),
+      ),
+    );
+  }
 }
 
 class GasolinerasApp extends StatelessWidget {

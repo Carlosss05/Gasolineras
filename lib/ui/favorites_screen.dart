@@ -114,7 +114,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         stations,
                         fuel: c.fuel,
                         sort: c.sort,
-                        car: c.car,
+                        plan: c.car == null ? null : c.plan,
                         position: pos == null ? null : (lat: pos.latitude, lng: pos.longitude),
                       );
                       final withoutFuel = stations.where((s) => !s.prices.containsKey(c.fuel)).toList();

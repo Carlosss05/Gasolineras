@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -26,6 +27,7 @@ class StationTile extends StatelessWidget {
     required this.minPrice,
     required this.maxPrice,
     this.change,
+    this.totalCost,
   });
 
   final Station station;
@@ -37,6 +39,10 @@ class StationTile extends StatelessWidget {
 
   /// Cuánto ha subido o bajado el precio (€/L), si se conoce.
   final double? change;
+
+  /// Lo que cuesta repostar aquí contando el viaje; se enseña al ordenar por
+  /// coste real ("Rentables").
+  final double? totalCost;
 
   @override
   Widget build(BuildContext context) {
@@ -75,12 +81,18 @@ class StationTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                       ),
-                      if (distanceKm != null || isOpen24h(station.schedule)) ...[
+                      if (distanceKm != null || totalCost != null || isOpen24h(station.schedule)) ...[
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 6,
                           runSpacing: 4,
                           children: [
+                            if (totalCost case final total?)
+                              InfoPill(
+                                icon: Icons.payments_outlined,
+                                text: '${formatEuros(total)} con viaje',
+                                color: scheme.primary,
+                              ),
                             if (distanceKm != null) InfoPill(icon: Icons.near_me, text: formatDistance(distanceKm!)),
                             if (isOpen24h(station.schedule)) const InfoPill(icon: Icons.schedule, text: '24 h'),
                           ],
@@ -111,7 +123,10 @@ class StationTile extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                   icon: Icon(isFavorite ? Icons.star_rounded : Icons.star_outline_rounded),
                   color: isFavorite ? AppColors.amber : scheme.onSurfaceVariant,
-                  onPressed: () => context.read<FavoritesController>().toggle(station),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    context.read<FavoritesController>().toggle(station);
+                  },
                 ),
               ],
             ),
@@ -142,9 +157,13 @@ class InfoPill extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: fg),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w700),
+          // Flexible: en huecos estrechos (o con horarios largos) el texto
+          // pasa a otra línea en vez de salirse de la etiqueta.
+          Flexible(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),

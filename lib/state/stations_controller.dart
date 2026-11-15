@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/fuel_price_repository.dart';
+import '../data/snapshot_store.dart';
 import '../logic/price_trend.dart';
 import '../logic/savings.dart';
 import '../models/car.dart';
@@ -16,8 +17,8 @@ import '../models/station.dart';
 import '../services/location_service.dart';
 import '../utils/text.dart';
 
-/// [value]: coste real de llenar el depósito (combustible + viaje de ida y
-/// vuelta); necesita el coche y la ubicación.
+/// [value]: coste real de repostar (combustible + viaje); necesita el plan de
+/// repostaje (litros y consumo) y la ubicación.
 enum SortMode { price, distance, value }
 
 class StationEntry {
@@ -37,7 +38,7 @@ List<StationEntry> buildEntries(
   ({double lat, double lng})? position,
   String query = '',
   String? municipalityId,
-  CarProfile? car,
+  TripPlan? plan,
 }) {
   final q = normalize(query.trim());
   final list = <StationEntry>[];
@@ -56,8 +57,8 @@ List<StationEntry> buildEntries(
 
   final (first, second) = switch (sort) {
     SortMode.distance when position != null => (byDistance, byPrice),
-    SortMode.value when position != null && car != null => (
-      (StationEntry a, StationEntry b) => effectiveCost(a, car).compareTo(effectiveCost(b, car)),
+    SortMode.value when position != null && plan != null => (
+      (StationEntry a, StationEntry b) => effectiveCost(a, plan).compareTo(effectiveCost(b, plan)),
       byPrice,
     ),
     _ => (byPrice, byDistance),
@@ -108,6 +109,10 @@ Set<String> _townForms(String name) => {
   return (id: nearest.municipalityId, name: nearest.municipality.split('/').first.trim());
 }
 
+/// Nombres normalizados de cada municipio, calculados una sola vez: en cada
+/// tecla del buscador se consultan los 8.100 de España.
+final _municipalityNames = Expando<List<String>>();
+
 /// Lugar fuera de la zona actual que coincide con lo que se busca.
 class PlaceSuggestion {
   const PlaceSuggestion(this.title, this.subtitle, this.scope);
@@ -150,7 +155,7 @@ List<PlaceSuggestion> findPlaces(
   for (final m in municipalities) {
     if (!outside(m.provinceId, m.communityId, m.id)) continue;
     // Nombres bilingües: "Calpe/Calp" debe encontrarse por cualquiera de los dos.
-    final names = normalize(m.name).split('/').map((n) => n.trim());
+    final names = _municipalityNames[m] ??= [for (final n in normalize(m.name).split('/')) n.trim()];
     if (names.any((n) => n.startsWith(q))) {
       startsWith.add(m);
     } else if (names.any((n) => n.contains(q))) {
@@ -165,22 +170,40 @@ List<PlaceSuggestion> findPlaces(
   ];
 }
 
+/// Mínimo, máximo, media y gasolinera más barata de la lista. Se calcula una
+/// vez por cambio de lista, no en cada repintado.
+typedef EntriesSummary = ({double min, double max, double average, StationEntry cheapest});
+
 class StationsController extends ChangeNotifier {
-  StationsController(this._repo, this._location);
+  StationsController(this._repo, this._location, {SnapshotStore? store}) : _store = store ?? SnapshotStore();
 
   static const _autoRefreshEvery = Duration(minutes: 10);
 
   /// Distancia que hay que recorrer antes de volver a comprobar pueblo y provincia.
   static const _provinceRecheckMeters = 1500.0;
 
+  /// Lo que se escribe en el buscador se usa tal cual para filtrar miles de
+  /// textos: se acota para que un pegado enorme no cueste nada.
+  static const maxQueryLength = 60;
+
   final FuelPriceRepository _repo;
   final LocationService _location;
+  final SnapshotStore _store;
 
   SearchScope? _scope;
   FuelType _fuel = FuelType.gasolina95;
   SortMode _sort = SortMode.price;
   String _query = '';
   CarProfile? _car;
+
+  // Plan de repostaje: lo que se ajusta en "¿Dónde reposto?". Mientras no se
+  // toque, sale del coche configurado o de valores típicos.
+  double? _planLiters;
+  double? _planConsumption;
+  bool _roundTrip = true;
+  EntriesSummary? _summary;
+  Recommendation? _recommendation;
+  bool _recommendationReady = false;
 
   Position? _position;
   Position? _lastProvinceCheck;
@@ -196,6 +219,10 @@ class StationsController extends ChangeNotifier {
   PriceSnapshot? _snapshot;
   bool loading = false;
   Object? error;
+
+  /// Los precios en pantalla son los guardados de otra sesión y aún no ha
+  /// llegado la actualización.
+  bool _showingStored = false;
 
   List<Province> provinces = const [];
   List<Community> communities = const [];
@@ -223,6 +250,10 @@ class StationsController extends ChangeNotifier {
   Position? get position => _position;
   PriceSnapshot? get snapshot => _snapshot;
 
+  /// No se han podido actualizar los precios y se enseñan los últimos que
+  /// había (guardados o de esta sesión).
+  bool get offline => error != null && _snapshot != null;
+
   List<StationEntry> get entries => _entries ??= _snapshot == null
       ? const []
       : buildEntries(
@@ -232,8 +263,69 @@ class StationsController extends ChangeNotifier {
           position: _position == null ? null : (lat: _position!.latitude, lng: _position!.longitude),
           query: _query,
           municipalityId: _scope?.kind == ScopeKind.myTown ? _scope!.townId : null,
-          car: _car,
+          plan: _car == null ? null : plan,
         );
+
+  /// Resumen de precios de [entries]; `null` con la lista vacía.
+  EntriesSummary? get summary {
+    final list = entries;
+    if (list.isEmpty) return null;
+    return _summary ??= () {
+      var min = double.infinity, max = 0.0, sum = 0.0;
+      var cheapest = list.first;
+      for (final e in list) {
+        sum += e.price;
+        if (e.price > max) max = e.price;
+        if (e.price < min) {
+          min = e.price;
+          cheapest = e;
+        }
+      }
+      return (min: min, max: max, average: sum / list.length, cheapest: cheapest);
+    }();
+  }
+
+  /// Litros, consumo y tipo de viaje con los que se calcula a qué gasolinera
+  /// conviene ir.
+  TripPlan get plan => TripPlan(
+    liters: _planLiters ?? _car?.tankLiters ?? TripPlan.defaultLiters,
+    consumption: _planConsumption ?? _car?.consumption ?? TripPlan.defaultConsumption,
+    roundTrip: _roundTrip,
+  );
+
+  /// Si el plan usa valores típicos (ni coche configurado ni ajustes a mano).
+  bool get planIsTypical => _car == null && _planLiters == null && _planConsumption == null;
+
+  /// Ajusta el plan de repostaje; los valores se acotan a rangos razonables.
+  void setPlan({double? liters, double? consumption, bool? roundTrip}) {
+    if (liters != null && liters.isFinite) {
+      _planLiters = liters.clamp(TripPlan.minLiters, TripPlan.maxLiters).toDouble();
+    }
+    if (consumption != null && consumption.isFinite) {
+      _planConsumption = consumption.clamp(TripPlan.minConsumption, TripPlan.maxConsumption).toDouble();
+    }
+    if (roundTrip != null) _roundTrip = roundTrip;
+    _recommendationReady = false;
+    // La lista solo depende del plan cuando se ordena por coste real.
+    if (_sort == SortMode.value) {
+      _invalidate();
+    } else {
+      _notify();
+    }
+  }
+
+  /// A qué gasolinera de la lista conviene ir contando el viaje. `null` sin
+  /// ubicación o sin gasolineras.
+  Recommendation? get recommendation {
+    if (!_recommendationReady) {
+      _recommendation = recommend(entries, plan);
+      _recommendationReady = true;
+    }
+    return _recommendation;
+  }
+
+  /// Lo que cuesta repostar en [e] con el plan actual, viaje incluido.
+  StationCost costOf(StationEntry e) => stationCost(e, plan);
 
   /// Gasolineras de la zona actual (sin filtrar por combustible ni búsqueda),
   /// de la más cercana a la más lejana si hay ubicación. Para elegir dónde se
@@ -315,7 +407,8 @@ class StationsController extends ChangeNotifier {
   /// se puede (sin datos todavía, o toda España).
   String? get _wantedTrendKey {
     final s = _scope;
-    if (s == null || _snapshot == null || s.kind == ScopeKind.spain) return null;
+    // Con precios guardados de otro día se espera a los de hoy para comparar.
+    if (s == null || _snapshot == null || _showingStored || s.kind == ScopeKind.spain) return null;
     return '${s.kind.name}|${s.id}|${s.townId}|${_fuel.name}|$pricesDay';
   }
 
@@ -369,7 +462,22 @@ class StationsController extends ChangeNotifier {
     // La última zona usada se muestra al instante, sin esperar al GPS; si
     // era "mi provincia", la ubicación la corrige después si has cambiado.
     final saved = await _restoreScope();
-    if (saved != null && _scope == null) unawaited(setScope(saved));
+    if (saved != null && _scope == null) {
+      // Los últimos precios guardados de esa zona se enseñan ya, sin esperar
+      // a la red; los nuevos se piden por detrás y los sustituyen.
+      final stored = await _store.load(saved.cacheKey);
+      if (_scope == null) {
+        if (stored == null) {
+          unawaited(setScope(saved));
+        } else {
+          _scope = saved;
+          _snapshot = stored;
+          _showingStored = true;
+          _invalidate();
+          unawaited(_load(force: true));
+        }
+      }
+    }
 
     await _startLocation();
   }
@@ -430,6 +538,8 @@ class StationsController extends ChangeNotifier {
   /// Coche del usuario: fija su combustible y permite ordenar por coste real.
   void setCar(CarProfile? car, {bool applyFuel = true}) {
     _car = car;
+    _planLiters = null;
+    _planConsumption = null;
     if (car != null && applyFuel) _fuel = car.fuel;
     if (car == null && _sort == SortMode.value) _sort = SortMode.price;
     _invalidate();
@@ -442,6 +552,7 @@ class StationsController extends ChangeNotifier {
   }
 
   void setQuery(String query) {
+    if (query.length > maxQueryLength) query = query.substring(0, maxQueryLength);
     if (query == _query) return;
     _query = query;
     _invalidate();
@@ -457,7 +568,10 @@ class StationsController extends ChangeNotifier {
       _invalidate();
       return;
     }
-    _snapshot = null;
+    // Si esta zona ya se descargó antes en esta sesión se enseña al instante,
+    // aunque ya no sea reciente, mientras se actualiza.
+    _snapshot = _repo.peek(scope);
+    _showingStored = false;
     _invalidate();
     await _load();
   }
@@ -484,6 +598,9 @@ class StationsController extends ChangeNotifier {
   Future<void> _load({bool force = false, bool silent = false}) async {
     final requested = _scope;
     if (requested == null) return;
+    // La respuesta vale mientras se siga en una zona con los mismos datos
+    // (p. ej. al pasar de la provincia a un pueblo suyo durante la descarga).
+    bool current() => _scope?.cacheKey == requested.cacheKey;
     if (!silent) {
       loading = true;
       error = null;
@@ -491,13 +608,15 @@ class StationsController extends ChangeNotifier {
     }
     try {
       final snapshot = await _repo.stations(requested, forceRefresh: force);
-      if (!identical(requested, _scope)) return;
+      if (!current()) return;
       _snapshot = snapshot;
+      _showingStored = false;
       error = null;
+      unawaited(_store.save(requested.cacheKey, snapshot));
     } catch (e) {
-      if (identical(requested, _scope) && !silent) error = e;
+      if (current() && !silent) error = e;
     } finally {
-      if (identical(requested, _scope)) {
+      if (current()) {
         loading = false;
         _invalidate();
       }
@@ -609,6 +728,8 @@ class StationsController extends ChangeNotifier {
   void _invalidate() {
     _entries = null;
     _places = null;
+    _summary = null;
+    _recommendationReady = false;
     _zoneTrends.clear();
     if (_wantedTrendKey != _trendKey) unawaited(_loadTrend());
     _notify();

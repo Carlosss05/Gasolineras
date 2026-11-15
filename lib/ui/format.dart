@@ -68,3 +68,9 @@ String daysAgoLabel(DateTime day, DateTime today) => switch (daysBetween(day, to
   2 => 'Anteayer',
   final days => 'Hace $days días',
 };
+
+/// Litros sin decimales de más: "40 L", "42,5 L".
+String formatLitersShort(double l) => formatLiters(l).replaceAll(',0 L', ' L');
+
+/// Consumo del coche: "6,5 L/100 km".
+String formatConsumption(double litersPer100Km) => '${_km.format(litersPer100Km)} L/100 km';

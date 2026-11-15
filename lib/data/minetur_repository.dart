@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -31,10 +32,21 @@ class MineturRepository implements FuelPriceRepository {
   Future<List<Community>>? _communities;
   Future<List<Municipality>>? _municipalities;
 
+  // Tamaño máximo aceptado por tipo de respuesta, con margen sobre el real
+  // (toda España ~12 MB, municipios ~1 MB, histórico de una comunidad ~0,5 MB).
+  // Una respuesta mayor es un error o un abuso: se corta la descarga en vez
+  // de llenar la memoria del móvil.
+  static const maxStationsBytes = 48 * 1024 * 1024;
+  static const maxListBytes = 4 * 1024 * 1024;
+  static const maxHistoryBytes = 4 * 1024 * 1024;
+
   @override
   Future<List<Municipality>> municipalities() => _municipalities ??=
       // ~1 MB de JSON: se descarga solo la primera vez que se busca algo.
-      _get('$_base/Listados/Municipios/').then((bytes) => compute(parseMunicipalities, bytes)).catchError((Object e) {
+      _get(
+        '$_base/Listados/Municipios/',
+        maxBytes: maxListBytes,
+      ).then((bytes) => compute(parseMunicipalities, bytes)).catchError((Object e) {
         _municipalities = null;
         throw e;
       });
@@ -76,6 +88,9 @@ class MineturRepository implements FuelPriceRepository {
       });
 
   @override
+  PriceSnapshot? peek(SearchScope scope) => _cache[scope.cacheKey];
+
+  @override
   Future<PriceSnapshot> stations(SearchScope scope, {bool forceRefresh = false}) {
     final key = scope.cacheKey;
     final cached = _cache[key];
@@ -102,7 +117,7 @@ class MineturRepository implements FuelPriceRepository {
       ScopeKind.myProvince ||
       ScopeKind.province => 'FiltroProvincia/${Uri.encodeComponent(scope.id)}',
     };
-    final bytes = await _get('$_base/EstacionesTerrestres/$filter');
+    final bytes = await _get('$_base/EstacionesTerrestres/$filter', maxBytes: maxStationsBytes);
     // Toda España son ~12 MB de JSON: se procesa fuera del hilo de la UI.
     try {
       return await compute(parseSnapshot, bytes);
@@ -120,7 +135,7 @@ class MineturRepository implements FuelPriceRepository {
     final cached = _history.remove(url);
     if (cached != null) return _history[url] = cached;
 
-    final future = _get(url)
+    final future = _get(url, maxBytes: maxHistoryBytes)
         .then((bytes) => compute(parseHistory, bytes))
         .then((prices) => PriceHistory(day: DateTime(day.year, day.month, day.day), prices: prices))
         .catchError((Object e) {
@@ -137,33 +152,62 @@ class MineturRepository implements FuelPriceRepository {
 
   static const _invalidData = 'El servicio de precios ha devuelto datos no válidos. Inténtalo más tarde.';
 
+  static const _noConnection = 'No se ha podido conectar con el servicio de precios.';
+
   Future<Object?> _getJson(String url) async {
-    final bytes = await _get(url);
+    final bytes = await _get(url, maxBytes: maxListBytes);
     try {
-      return jsonDecode(utf8.decode(bytes));
+      return decodeJsonBytes(bytes);
     } catch (_) {
       throw FuelApiException(_invalidData);
     }
   }
 
-  Future<Uint8List> _get(String url) async {
-    final http.Response res;
+  /// Descarga [url] por trozos y corta si pasa de [maxBytes] (lo que diga la
+  /// cabecera o lo que llegue de verdad). El límite de tiempo es por trozo:
+  /// una conexión lenta pero viva puede terminar toda España.
+  Future<Uint8List> _get(String url, {required int maxBytes}) async {
+    const patience = Duration(seconds: 90);
+    final http.StreamedResponse res;
     try {
-      res = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 90));
+      res = await _client.send(http.Request('GET', Uri.parse(url))).timeout(patience);
     } catch (_) {
-      throw FuelApiException('No se ha podido conectar con el servicio de precios.');
+      throw FuelApiException(_noConnection);
     }
     if (res.statusCode != 200) {
       throw FuelApiException('El servicio de precios respondió con error ${res.statusCode}.');
     }
-    return res.bodyBytes;
+    if ((res.contentLength ?? 0) > maxBytes) throw FuelApiException(_invalidData);
+
+    final body = BytesBuilder(copy: false);
+    try {
+      await for (final chunk in res.stream.timeout(patience)) {
+        body.add(chunk);
+        if (body.length > maxBytes) throw FuelApiException(_invalidData);
+      }
+    } on FuelApiException {
+      rethrow;
+    } catch (_) {
+      throw FuelApiException(_noConnection);
+    }
+    return body.takeBytes();
   }
 }
 
+/// Máximo de elementos que se procesan de una respuesta (España tiene unas
+/// 12.000 gasolineras y 8.100 municipios).
+const maxApiItems = 30000;
+
+final _jsonFromUtf8 = const Utf8Decoder().fuse(const JsonDecoder());
+
+/// JSON directamente desde los bytes de la respuesta, sin crear antes el
+/// texto entero en memoria (con toda España, 12 MB menos y más rápido).
+Object? decodeJsonBytes(List<int> bytes) => _jsonFromUtf8.convert(bytes);
+
 /// Convierte la respuesta de `EstacionesTerrestres` en un [PriceSnapshot].
 PriceSnapshot parseSnapshot(Uint8List bytes) {
-  final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-  final raw = (json['ListaEESSPrecio'] as List? ?? const []).cast<Map<String, dynamic>>();
+  final json = decodeJsonBytes(bytes) as Map<String, dynamic>;
+  final raw = (json['ListaEESSPrecio'] as List? ?? const []).take(maxApiItems).cast<Map<String, dynamic>>();
   return PriceSnapshot(
     stations: raw.map(Station.fromApi).whereType<Station>().toList(growable: false),
     publishedAt: _parseDate(json['Fecha'] as String?),
@@ -191,9 +235,9 @@ String? historyUrl(SearchScope scope, FuelType fuel, DateTime day) {
 /// Convierte la respuesta del histórico en precio por gasolinera. Como el
 /// resto de la API, se trata como no fiable: ids cortos y precios en rango.
 Map<String, double> parseHistory(Uint8List bytes) {
-  final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+  final json = decodeJsonBytes(bytes) as Map<String, dynamic>;
   final prices = <String, double>{};
-  for (final item in json['ListaEESSPrecio'] as List? ?? const []) {
+  for (final item in (json['ListaEESSPrecio'] as List? ?? const []).take(maxApiItems)) {
     if (item is! Map<String, dynamic>) continue;
     final id = item['IDEESS'];
     final price = parseApiNumber(item['PrecioProducto']);
@@ -206,15 +250,21 @@ Map<String, double> parseHistory(Uint8List bytes) {
 }
 
 List<Municipality> parseMunicipalities(Uint8List bytes) {
-  final raw = (jsonDecode(utf8.decode(bytes)) as List).cast<Map<String, dynamic>>();
+  final raw = (decodeJsonBytes(bytes) as List).take(maxApiItems).cast<Map<String, dynamic>>();
+  // Textos de la API: acotados, como los de las gasolineras.
+  String text(Object? v) {
+    final t = '${v ?? ''}'.trim();
+    return t.length > Station.maxTextLength ? t.substring(0, Station.maxTextLength) : t;
+  }
+
   return [
     for (final m in raw)
       Municipality(
-        id: '${m['IDMunicipio']}',
-        name: '${m['Municipio']}',
-        provinceId: '${m['IDProvincia']}',
-        provinceName: prettyName('${m['Provincia']}'),
-        communityId: '${m['IDCCAA']}',
+        id: text(m['IDMunicipio']),
+        name: text(m['Municipio']),
+        provinceId: text(m['IDProvincia']),
+        provinceName: prettyName(text(m['Provincia'])),
+        communityId: text(m['IDCCAA']),
       ),
   ];
 }
