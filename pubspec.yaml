@@ -33,14 +33,14 @@ dependencies:
 
   provider: ^6.1.5+1
   http: ^1.6.0
-  geolocator: ^14.1.1
-  geocoding: ^5.0.0
-  shared_preferences: ^2.5.5
+  geolocator: ^14.1.2
+  geocoding: ^5.0.1
+  shared_preferences: ^2.5.6
   url_launcher: ^6.3.3
   intl: ^0.20.2
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
-  google_fonts: ^8.2.1
+  google_fonts: ^9.0.0
   flutter_localizations:
     sdk: flutter
 
