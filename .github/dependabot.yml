@@ -1,0 +1,23 @@
+# Actualizaciones automáticas de seguridad.
+#
+# Las acciones de los workflows van fijadas a un commit exacto (no a una
+# etiqueta, que su autor puede mover): así nadie puede colar código en la
+# compilación que firma el APK. Dependabot propone el commit nuevo cuando sale
+# una versión, y hace lo mismo con los paquetes de Dart. Una sola propuesta
+# al mes por cada tipo, para no llenar el repositorio de avisos.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      acciones:
+        patterns: ['*']
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      paquetes:
+        patterns: ['*']
