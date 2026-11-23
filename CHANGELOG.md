@@ -2,7 +2,7 @@
 
 Cada versión de Android se publica en [Releases](https://github.com/Carlosss05/Gasolineras/releases) y la web en [carlosss05.github.io/Gasolineras](https://carlosss05.github.io/Gasolineras/).
 
-## Próxima versión
+## 1.4.0 — noviembre de 2026
 
 **¿Dónde reposto?**
 - La tarjeta destacada pasa a ser **Tu mejor opción**: la gasolinera a la que te sale más barato ir contando el precio, la distancia y lo que gasta tu coche en el viaje (antes era solo la más barata).
